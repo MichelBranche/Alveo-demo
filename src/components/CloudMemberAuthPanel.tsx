@@ -1,10 +1,11 @@
 import { type FormEvent, type ReactNode, useCallback, useId, useState } from 'react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
+import { useNavigate } from 'react-router-dom'
 import {
   signInDiaryCloud,
   signOutDiaryCloud,
-  signUpDiaryCloud,
 } from '../lib/diaryCloud'
+import { useNavTransition } from './NavigationTransition'
 
 export type CloudMemberAuthPanelProps = {
   ariaLabel: string
@@ -30,6 +31,8 @@ export function CloudMemberAuthPanel({
   onToast,
 }: CloudMemberAuthPanelProps) {
   const formSuffix = useId()
+  const navigate = useNavigate()
+  const { runBehindCurtain } = useNavTransition()
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
@@ -55,33 +58,6 @@ export function CloudMemberAuthPanel({
       } catch (err) {
         console.error(err)
         onToast('Accesso non riuscito controlla email e password.')
-      } finally {
-        setAuthBusy(false)
-      }
-    },
-    [authEmail, authPassword, sb, onToast],
-  )
-
-  const onSignUp = useCallback(
-    async (ev: FormEvent) => {
-      ev.preventDefault()
-      const em = authEmail.trim()
-      if (!em || authPassword.length < 6) {
-        onToast('Email e password almeno 6 caratteri.')
-        return
-      }
-      setAuthBusy(true)
-      try {
-        const s = await signUpDiaryCloud(sb, em, authPassword)
-        if (s) {
-          onToast('Account creato e collegato.')
-          setAuthPassword('')
-        } else {
-          onToast('Registrazione inviata se richiesta conferma email controlla la posta.')
-        }
-      } catch (err) {
-        console.error(err)
-        onToast('Registrazione non riuscita forse l email è già in uso prova ad accedere.')
       } finally {
         setAuthBusy(false)
       }
@@ -165,7 +141,9 @@ export function CloudMemberAuthPanel({
             <button
               type="button"
               disabled={authBusy}
-              onClick={(e) => void onSignUp(e)}
+              onClick={() => {
+                runBehindCurtain(() => navigate('/registrazione'))
+              }}
               className="rounded-xl border-[3px] border-[#1A1A1A] bg-[#d8cde6] px-4 py-2.5 text-sm font-bold text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] transition hover:-translate-y-0.5 disabled:opacity-50"
             >
               Registrati

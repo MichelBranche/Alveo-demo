@@ -133,8 +133,24 @@ export async function signInDiaryCloud(sb: SupabaseClient, email: string, passwo
   return data.session
 }
 
-export async function signUpDiaryCloud(sb: SupabaseClient, email: string, password: string) {
-  const { data, error } = await sb.auth.signUp({ email: email.trim(), password })
+export async function signUpDiaryCloud(
+  sb: SupabaseClient,
+  email: string,
+  password: string,
+  profile?: { displayName?: string },
+) {
+  const name = profile?.displayName?.trim()
+  const { data, error } = await sb.auth.signUp({
+    email: email.trim(),
+    password,
+    ...(name
+      ? {
+          options: {
+            data: { display_name: name, full_name: name },
+          },
+        }
+      : {}),
+  })
   if (error) throw error
   return data.session as Session | null
 }

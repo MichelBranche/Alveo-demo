@@ -1,6 +1,8 @@
-import { type FormEvent, useId, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useId, useMemo, useRef, useState } from 'react'
 import { CurtainLink } from '../components/NavigationTransition'
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter'
+import { useDiaryAuth } from '../context/DiaryAuthContext'
+import { signUpDiaryCloud } from '../lib/diaryCloud'
 import {
   buildValidatedRegistrationPayload,
   getPasswordStrength,
@@ -13,9 +15,36 @@ const inputClass =
 
 const SUBMIT_COOLDOWN_MS = 1200
 
+function messageFromSignupError(err: unknown): string {
+  const raw =
+    typeof err === 'object' &&
+    err &&
+    'message' in err &&
+    typeof (err as { message?: unknown }).message === 'string'
+      ? ((err as { message: string }).message || '').trim()
+      : ''
+
+  const lower = raw.toLowerCase()
+
+  if (
+    /already (registered|exists)|duplicate|already been registered/i.test(raw) ||
+    lower.includes('user already registered')
+  ) {
+    return 'Esiste già un account con questa email. Usa «Accedi» dalla stessa pagina.'
+  }
+
+  if (lower.includes('password') && lower.includes('weak')) {
+    return 'La password è stata rifiutata dal servizio scegli una più lunga o più complessa.'
+  }
+
+  if (raw) return raw
+  return 'Registrazione non riuscita. Riprova tra poco.'
+}
+
 export default function RegisterPage() {
   const formId = useId()
   const lastSubmitAt = useRef(0)
+  const { cloudEnabled, supabase } = useDiaryAuth()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -23,6 +52,9 @@ export default function RegisterPage() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const [errors, setErrors] = useState<RegisterFieldErrors>({})
   const [submittedOk, setSubmittedOk] = useState(false)
+  const [postSubmit, setPostSubmit] = useState<'logged_in' | 'confirm_email' | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const passwordStrength = useMemo(() => getPasswordStrength(password), [password])
 
@@ -34,44 +66,64 @@ export default function RegisterPage() {
     .filter(Boolean)
     .join(' ')
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    const now = Date.now()
-    if (now - lastSubmitAt.current < SUBMIT_COOLDOWN_MS) return
-    lastSubmitAt.current = now
+  const handleSubmit = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault()
+      const now = Date.now()
+      if (now - lastSubmitAt.current < SUBMIT_COOLDOWN_MS) return
+      lastSubmitAt.current = now
 
-    setSubmittedOk(false)
+      setSubmittedOk(false)
+      setPostSubmit(null)
+      setSubmitError(null)
 
-    const result = buildValidatedRegistrationPayload({
-      displayNameRaw: displayName,
-      emailRaw: email,
-      password,
+      const result = buildValidatedRegistrationPayload({
+        displayNameRaw: displayName,
+        emailRaw: email,
+        password,
+        confirmPassword,
+        privacyAccepted,
+      })
+
+      if (!result.ok) {
+        setErrors(result.errors)
+        return
+      }
+
+      if (!supabase || !cloudEnabled) {
+        setSubmitError(
+          'Supabase non è configurato nell’ambiente dell’app. Imposta VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (vedi .env.example) e riavvia il server di sviluppo.',
+        )
+        return
+      }
+
+      setSubmitting(true)
+      try {
+        const session = await signUpDiaryCloud(supabase, result.email, result.password, {
+          displayName: result.displayName.trim() ? result.displayName : undefined,
+        })
+        setPassword('')
+        setConfirmPassword('')
+        setErrors({})
+        setPostSubmit(session ? 'logged_in' : 'confirm_email')
+        setSubmittedOk(true)
+      } catch (err) {
+        console.error(err)
+        setSubmitError(messageFromSignupError(err))
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [
+      cloudEnabled,
       confirmPassword,
+      displayName,
+      email,
+      password,
       privacyAccepted,
-    })
-
-    if (!result.ok) {
-      setErrors(result.errors)
-      return
-    }
-
-    /* Invio reale (esempio):
-     * await secureFetch(`${import.meta.env.VITE_API_BASE_URL}/auth/register`, {
-     *   method: 'POST',
-     *   body: JSON.stringify({
-     *     email: result.email,
-     *     displayName: result.displayName,
-     *     password: result.password,
-     *   }),
-     * })
-     * Mai loggare `result.password`; hash lato solo server.
-     */
-
-    setPassword('')
-    setConfirmPassword('')
-    setErrors({})
-    setSubmittedOk(true)
-  }
+      supabase,
+    ],
+  )
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#F4F0EA] text-gray-900">
@@ -104,18 +156,32 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {submittedOk ? (
+        {submittedOk && postSubmit ? (
           <div
             className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6]/70 p-6 shadow-[4px_4px_0px_#1A1A1A]"
             role="status"
           >
-            <p className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#1A1A1A]">
-              Modulo compilato correttamente
-            </p>
-            <p className="mt-3 text-[15px] leading-relaxed text-gray-800">
-              In questa demo non viene creato alcun account esterno. Collegando un servizio di autenticazione, qui
-              comparirà la conferma o eventuali messaggi dal server.
-            </p>
+            {postSubmit === 'logged_in' ? (
+              <>
+                <p className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#1A1A1A]">
+                  Account creato — sei dentro
+                </p>
+                <p className="mt-3 text-[15px] leading-relaxed text-gray-800">
+                  La sessione è attiva: puoi usare diario e oasi collegate al cloud. Se qualcosa non si aggiorna subito,
+                  torna alla home e riapri la sezione.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#1A1A1A]">
+                  Controlla la posta elettronica
+                </p>
+                <p className="mt-3 text-[15px] leading-relaxed text-gray-800">
+                  Il servizio richiede di confermare l&apos;indirizzo email prima di entrare nell&apos;app. Apri il link
+                  nel messaggio; dopo la conferma potrai eseguire l&apos;accesso da «Accedi» o dal pannello nel diario.
+                </p>
+              </>
+            )}
             <CurtainLink
               to="/"
               className="mt-6 inline-flex rounded-xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-6 py-3 font-semibold text-white shadow-[2px_2px_0px_#ffffff] transition hover:bg-[#2a383f]"
@@ -124,7 +190,30 @@ export default function RegisterPage() {
             </CurtainLink>
           </div>
         ) : (
-          <form id={formId} onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
+          <form
+            id={formId}
+            onSubmit={(ev) => void handleSubmit(ev)}
+            className="flex flex-col gap-6"
+            noValidate
+            aria-busy={submitting || undefined}
+          >
+            {!cloudEnabled ? (
+              <div
+                className="rounded-2xl border-[3px] border-amber-800 bg-amber-50 px-4 py-3 text-[15px] leading-relaxed text-amber-950"
+                role="note"
+              >
+                Configurazione mancante: non troviamo <code className="text-sm">VITE_SUPABASE_URL</code> e/o{' '}
+                <code className="text-sm">VITE_SUPABASE_ANON_KEY</code>. Conferma nel file{' '}
+                <code className="text-sm">.env.local</code> e riavvia{' '}
+                <code className="text-sm">npm run dev</code>.
+              </div>
+            ) : null}
+
+            {submitError ? (
+              <p className="rounded-2xl border-[3px] border-red-800 bg-red-50 px-4 py-3 text-[15px] font-medium leading-relaxed text-red-950" role="alert">
+                {submitError}
+              </p>
+            ) : null}
             <div>
               <label htmlFor={`${formId}-name`} className="text-sm font-bold text-[#1A1A1A]">
                 Nome o come presentarsi <span className="font-medium text-gray-500">(facoltativo)</span>
@@ -282,9 +371,10 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-4 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#D8CDE6] transition hover:bg-[#2a383f] active:translate-x-[2px] active:translate-y-[2px]"
+              disabled={submitting || !cloudEnabled}
+              className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-4 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#D8CDE6] transition hover:bg-[#2a383f] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
             >
-              Crea account
+              {submitting ? 'Creazione…' : 'Crea account'}
             </button>
 
             <p className="text-center text-sm text-gray-700">
