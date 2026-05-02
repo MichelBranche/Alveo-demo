@@ -122,9 +122,18 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
             <strong className="font-semibold text-[#1A1A1A]">
               solo per chi ha account registrato sul servizio sicuro cloud di Alveo
             </strong>
-            , una volta configurata l&apos;infrastruttura (variabili d&apos;ambiente come da{' '}
+            , dopo aver configurato le variabili come in{' '}
             <code className="rounded bg-white px-1 text-xs">.env.example</code>
+            {' '}
+            (<code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_URL</code>,{' '}
+            <code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_ANON_KEY</code>
             ).
+          </p>
+          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-gray-700">
+            Su <strong>Vercel</strong> vanno copiate anche in Dashboard → progetto → <strong>Settings → Environment Variables</strong>
+            (Production e eventualmente Preview), con lo stesso prefisso{' '}
+            <code className="rounded bg-white px-1 text-xs">VITE_</code>, poi fare un{' '}
+            <strong>nuovo deploy</strong>: con Vite i valori vengono inseriti al build, non a runtime dopo un solo push senza redeploy da variabili aggiornate.
           </p>
         </div>
       </div>
