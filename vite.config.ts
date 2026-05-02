@@ -2,16 +2,16 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+/** frame-ancestors in <meta http-equiv=CSP> is ignored by browsers; use HTTP headers on the host (e.g. vercel.json). */
 const PROD_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
-  "connect-src 'self'",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
   "object-src 'none'",
   "upgrade-insecure-requests",
 ].join('; ')

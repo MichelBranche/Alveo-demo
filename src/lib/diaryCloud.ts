@@ -27,10 +27,32 @@ type DbRow = {
   body: string
 }
 
+/** Normalizza virgolette o spazi spesso introdotti copiando in Vercel / .env */
+function trimmedEnv(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  let s = value.trim()
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim()
+  }
+  return s
+}
+
+/** Evita crash di createClient se l’URL non è valido (placeholders, typo, senza scheme). */
+function isAllowedSupabaseUrl(raw: string): boolean {
+  if (!raw) return false
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
+    return Boolean(u.hostname)
+  } catch {
+    return false
+  }
+}
+
 export function diaryCloudConfigured(): boolean {
-  const u = import.meta.env.VITE_SUPABASE_URL
-  const k = import.meta.env.VITE_SUPABASE_ANON_KEY
-  return typeof u === 'string' && u.length > 0 && typeof k === 'string' && k.length > 0
+  const u = trimmedEnv(import.meta.env.VITE_SUPABASE_URL)
+  const k = trimmedEnv(import.meta.env.VITE_SUPABASE_ANON_KEY)
+  return isAllowedSupabaseUrl(u) && k.length > 0
 }
 
 let client: SupabaseClient | null | undefined
@@ -38,9 +60,9 @@ let client: SupabaseClient | null | undefined
 export function getDiarySupabase(): SupabaseClient | null {
   if (!diaryCloudConfigured()) return null
   if (client !== undefined) return client
-  const url = import.meta.env.VITE_SUPABASE_URL
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
-  client = createClient(url!, key!, {
+  const url = trimmedEnv(import.meta.env.VITE_SUPABASE_URL)
+  const key = trimmedEnv(import.meta.env.VITE_SUPABASE_ANON_KEY)
+  client = createClient(url, key, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
