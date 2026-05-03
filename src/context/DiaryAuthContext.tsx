@@ -4,6 +4,11 @@ import { DEV_BYPASS_AUTH_GATES } from '../devAuthBypass'
 import { clearAudiobookLastPlayback } from '../lib/audiobookLastPlayback'
 import { clearSavedAudiobookChapters } from '../lib/savedAudiobookChapters'
 import { getDiarySupabase } from '../lib/diaryCloud'
+import {
+  attachUserAppProfilePushOnHide,
+  pullUserAppProfile,
+  setUserAppProfileSyncContext,
+} from '../lib/userAppPreferencesCloud'
 
 export type DiaryAuthState = {
   /** Backend diario configurato (Supabase URL + anon key). */
@@ -67,6 +72,22 @@ export function DiaryAuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe()
     }
   }, [supabase])
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) {
+      setUserAppProfileSyncContext(null, null)
+      return
+    }
+    const uid = session.user.id
+    setUserAppProfileSyncContext(supabase, uid)
+    void pullUserAppProfile(supabase, uid).catch((e) => console.warn('Profilo app (pull):', e))
+    const detach = attachUserAppProfilePushOnHide()
+    return () => {
+      detach()
+      /* Niente flush qui: al logout SIGNED_OUT svuota il localStorage prima del cleanup e riscriveremmo null sul server. */
+      setUserAppProfileSyncContext(null, null)
+    }
+  }, [supabase, session?.user?.id])
 
   const canUseDiary = DEV_BYPASS_AUTH_GATES || Boolean(supabase && session)
   const canUseOasis = canUseDiary

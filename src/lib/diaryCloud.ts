@@ -212,6 +212,8 @@ export async function signUpDiaryCloud(
 }
 
 export async function signOutDiaryCloud(sb: SupabaseClient) {
+  const { flushUserAppProfilePush } = await import('./userAppPreferencesCloud')
+  await flushUserAppProfilePush().catch(() => {})
   const { error } = await sb.auth.signOut()
   if (error) throw error
 }

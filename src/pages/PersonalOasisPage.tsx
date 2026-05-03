@@ -14,6 +14,7 @@ import {
   type SavedAudiobookChapter,
 } from '../lib/savedAudiobookChapters'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
+import { OASIS_MOOD_SYNC_EVENT, scheduleUserAppProfilePush } from '../lib/userAppPreferencesCloud'
 import type { NavId } from '../nav'
 
 const MOODS = ['Agitazione fisica', 'Pensieri ossessivi', 'Insonnia'] as const
@@ -112,18 +113,24 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
 
   useEffect(() => {
     if (!canUseOasis) return
-    try {
-      const raw = localStorage.getItem(OASIS_MOOD_STORAGE_KEY)
-      if (raw && (MOODS as readonly string[]).includes(raw)) {
-        setSelectedMood(raw as OasisMood)
+    const syncMoodFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(OASIS_MOOD_STORAGE_KEY)
+        if (raw && (MOODS as readonly string[]).includes(raw)) setSelectedMood(raw as OasisMood)
+        else setSelectedMood(null)
+      } catch {
+        /* storage non disponibile */
       }
-    } catch {
-      /* storage non disponibile */
     }
+    syncMoodFromStorage()
+    window.addEventListener(OASIS_MOOD_SYNC_EVENT, syncMoodFromStorage)
     const id = window.setInterval(() => {
       setActIntentIndex((i) => (i + 1) % ACT_INTENTIONS.length)
     }, ACT_INTENTION_ROTATION_MS)
-    return () => window.clearInterval(id)
+    return () => {
+      window.removeEventListener(OASIS_MOOD_SYNC_EVENT, syncMoodFromStorage)
+      window.clearInterval(id)
+    }
   }, [canUseOasis])
 
   useEffect(() => {
@@ -159,6 +166,7 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
       }
       return next
     })
+    scheduleUserAppProfilePush()
   }, [])
 
   const actIntent = ACT_INTENTIONS[actIntentIndex]

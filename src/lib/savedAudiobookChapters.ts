@@ -51,6 +51,7 @@ function persist(list: SavedAudiobookChapter[]) {
     /* ignore */
   }
   notifyChanged()
+  void import('./userAppPreferencesCloud').then((m) => m.scheduleUserAppProfilePush())
 }
 
 export function isAudiobookChapterSaved(audiobookId: string, chapterIndex: number): boolean {

@@ -708,6 +708,7 @@ export function AudiobookAlbumListenView({
     } catch {
       /* ignore */
     }
+    void import('../lib/userAppPreferencesCloud').then((m) => m.scheduleUserAppProfilePush())
   }, [])
 
   const toggleMute = useCallback(() => {

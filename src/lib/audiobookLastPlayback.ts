@@ -54,6 +54,7 @@ export function saveAudiobookLastPlayback(patch: Omit<AudiobookLastPlaybackState
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(next))
     window.dispatchEvent(new CustomEvent(LAST_PLAYBACK_CHANGED))
+    void import('./userAppPreferencesCloud').then((m) => m.scheduleUserAppProfilePush())
   } catch {
     /* ignore */
   }
