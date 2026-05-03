@@ -9,6 +9,7 @@ const PROD_CSP = [
   "style-src 'self' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
   "base-uri 'self'",
   "form-action 'self'",

@@ -12,7 +12,7 @@ export type DiaryAuthState = {
   supabase: SupabaseClient | null
   /** Diario uso completo solo con account registrato sul servizio cloud. */
   canUseDiary: boolean
-  /** Oasi personale e altri spazi membri sullo stesso account cloud. */
+  /** Area personale e altri spazi membri sullo stesso account cloud. */
   canUseOasis: boolean
   /** Bypass login/cloud gate (solo dev, vedi `devAuthBypass.ts`). */
   devAuthBypass: boolean

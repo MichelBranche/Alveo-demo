@@ -299,3 +299,166 @@ ul.landing-account-benefits li:nth-child(3) .sparkle-diamond {
     will-change: auto;
   }
 }
+
+/* Audiolibri: barra avanzamento (player unico, tema scuro) */
+.slider-audiobook {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 0.5rem;
+  border-radius: 9999px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.slider-audiobook::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.slider-audiobook::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: -0.28125rem;
+  border-radius: 9999px;
+  border: 3px solid #1a1a1a;
+  background-color: #f9e784;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  cursor: pointer;
+}
+
+.slider-audiobook:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.slider-audiobook::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.slider-audiobook::-moz-range-thumb {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  border: 3px solid #1a1a1a;
+  background: #f9e784;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  cursor: pointer;
+}
+
+.slider-audiobook:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Dock audiolibro (barra sottile) */
+.slider-audiobook-dock {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 0.1875rem;
+  border-radius: 9999px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.slider-audiobook-dock::-webkit-slider-runnable-track {
+  height: 0.1875rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.slider-audiobook-dock::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.5625rem;
+  height: 0.5625rem;
+  margin-top: -0.15625rem;
+  border-radius: 9999px;
+  border: none;
+  background-color: #1ed760;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.slider-audiobook-dock:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.slider-audiobook-dock::-moz-range-track {
+  height: 0.1875rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.slider-audiobook-dock::-moz-range-thumb {
+  width: 0.5625rem;
+  height: 0.5625rem;
+  border-radius: 9999px;
+  border: none;
+  background: #1ed760;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.slider-audiobook-dock:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Dock: volume compatto */
+.slider-audiobook-volume {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 0.25rem;
+  border-radius: 9999px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.2);
+  width: 4.25rem;
+  max-width: 22vw;
+}
+
+.slider-audiobook-volume::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.slider-audiobook-volume::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.5625rem;
+  height: 0.5625rem;
+  margin-top: -0.125rem;
+  border-radius: 9999px;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+}
+
+.slider-audiobook-volume::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.slider-audiobook-volume::-moz-range-thumb {
+  width: 0.5625rem;
+  height: 0.5625rem;
+  border-radius: 9999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-player-slide {
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

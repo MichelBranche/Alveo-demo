@@ -33,10 +33,9 @@ export default function HomeLandingPage({
           </h1>
 
           <p className="mt-7 max-w-2xl text-[15px] font-medium leading-relaxed text-[#2d3f46] md:text-lg">
-            Dopo il respiro iniziale puoi orientarti dalla home senza fretta. L'
-            <span className="whitespace-nowrap">«oasi»</span>{' '}
-            personale è riservata a chi è registrato e ha effettuato l'accesso sul servizio sicuro cloud: dentro
-            trovi ascolti, piccoli strumenti e un punto fisso dove tornare nei momenti più agitati.
+            Dopo il respiro iniziale puoi orientarti dalla home senza fretta. L&apos;area personale è riservata a chi è
+            registrato e ha effettuato l&apos;accesso sul servizio sicuro cloud: dentro trovi ascolti, piccoli strumenti
+            e un punto fisso dove tornare nei momenti più agitati.
           </p>
 
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
@@ -50,7 +49,7 @@ export default function HomeLandingPage({
               }
               className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-8 py-4 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#ffffff] outline-none ring-offset-[#eae5df] transition hover:bg-[#2a383f] focus-visible:ring-2 focus-visible:ring-[#1A1A1A] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#ffffff]"
             >
-              {canUseOasis ? "Apri l'oasi personale" : "Verso l'oasi (solo utenti registrati)"}
+              {canUseOasis ? "Apri l'area personale" : "Verso l'area personale (solo utenti registrati)"}
             </button>
             <button
               type="button"
@@ -63,7 +62,7 @@ export default function HomeLandingPage({
         </div>
       </section>
 
-      <LandingServiceProposals onEnterOasis={onEnterOasis} onSelectNav={onSelectNav} />
+      <LandingServiceProposals onSelectNav={onSelectNav} />
 
       <SesameHomeTeaser />
 
@@ -79,7 +78,7 @@ export default function HomeLandingPage({
             Creare un account
           </h2>
           <p className="mt-4 text-[15px] leading-relaxed text-gray-700 md:text-base">
-            Registrarsi e accedere sul cloud di Alveo sbloccano l'oasi personale e il diario; meditazioni e strumenti
+            Registrarsi e accedere sul cloud di Alveo sbloccano l&apos;area personale e il diario; meditazioni e strumenti
             restano fruibili anche senza accesso mentre si integra gradualmente tutto il percorso.
           </p>
           <ul className="landing-account-benefits mt-5 space-y-2 text-sm font-medium text-gray-600 md:text-[15px]">

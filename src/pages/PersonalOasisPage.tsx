@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CloudMemberAuthPanel } from '../components/CloudMemberAuthPanel'
+import { AUDIOBOOK_CATALOG } from '../content/audiobooks'
+import { stashAudiobookOpenIntent } from '../lib/audiobookOpenIntent'
+import {
+  loadSavedAudiobookChapters,
+  removeSavedAudiobookChapter,
+  SAVED_CHAPTERS_CHANGED,
+  type SavedAudiobookChapter,
+} from '../lib/savedAudiobookChapters'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
 import type { NavId } from '../nav'
 
 const MOODS = ['Agitazione fisica', 'Pensieri ossessivi', 'Insonnia'] as const
+type OasisMood = (typeof MOODS)[number]
+
+const OASIS_MOOD_STORAGE_KEY = 'alveo:oasisMood:v1'
 
 /** Rotating ACT-inspired reminders for the oasis banner */
 const ACT_INTENTION_ROTATION_MS = 20_000
@@ -74,11 +85,12 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
     canUseDiary,
     devAuthBypass,
   } = useDiaryAuth()
-  const [audioPlaying, setAudioPlaying] = useState(false)
-  const [progress] = useState(35)
-  const [selectedMood, setSelectedMood] = useState<string | null>(null)
+  const [selectedMood, setSelectedMood] = useState<OasisMood | null>(null)
   const [actIntentIndex, setActIntentIndex] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
+  const [savedListening, setSavedListening] = useState<SavedAudiobookChapter[]>(() =>
+    loadSavedAudiobookChapters(),
+  )
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const showToast = useCallback((msg: string) => {
@@ -89,13 +101,43 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
 
   useEffect(() => {
     if (!canUseOasis) return
+    try {
+      const raw = localStorage.getItem(OASIS_MOOD_STORAGE_KEY)
+      if (raw && (MOODS as readonly string[]).includes(raw)) {
+        setSelectedMood(raw as OasisMood)
+      }
+    } catch {
+      /* storage non disponibile */
+    }
     const id = window.setInterval(() => {
       setActIntentIndex((i) => (i + 1) % ACT_INTENTIONS.length)
     }, ACT_INTENTION_ROTATION_MS)
     return () => window.clearInterval(id)
   }, [canUseOasis])
 
+  useEffect(() => {
+    if (!canUseOasis) return
+    const fn = () => setSavedListening(loadSavedAudiobookChapters())
+    window.addEventListener(SAVED_CHAPTERS_CHANGED, fn)
+    return () => window.removeEventListener(SAVED_CHAPTERS_CHANGED, fn)
+  }, [canUseOasis])
+
+  const toggleMood = useCallback((mood: OasisMood) => {
+    setSelectedMood((cur) => {
+      const next = cur === mood ? null : mood
+      try {
+        if (next == null) localStorage.removeItem(OASIS_MOOD_STORAGE_KEY)
+        else localStorage.setItem(OASIS_MOOD_STORAGE_KEY, next)
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
+
   const actIntent = ACT_INTENTIONS[actIntentIndex]
+
+  const spotlightAudiobook = useMemo(() => AUDIOBOOK_CATALOG[0] ?? null, [])
 
   const todayLabel = useMemo(() => {
     try {
@@ -116,24 +158,12 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
           <span className="mb-4 inline-flex text-3xl" aria-hidden>
             🏠
           </span>
-          <h1 className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">Oasi personale</h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-gray-700">
-            Questa area è disponibile{' '}
-            <strong className="font-semibold text-[#1A1A1A]">
-              solo per chi ha account registrato sul servizio sicuro cloud di Alveo
-            </strong>
-            , dopo aver configurato le variabili come in{' '}
-            <code className="rounded bg-white px-1 text-xs">.env.example</code>
-            {' '}
-            (<code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_URL</code>,{' '}
-            <code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_ANON_KEY</code>
-            ).
-          </p>
-          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-gray-700">
-            Su <strong>Vercel</strong> vanno copiate anche in Dashboard → progetto → <strong>Settings → Environment Variables</strong>
-            (Production e eventualmente Preview), con lo stesso prefisso{' '}
-            <code className="rounded bg-white px-1 text-xs">VITE_</code>, poi fare un{' '}
-            <strong>nuovo deploy</strong>: con Vite i valori vengono inseriti al build, non a runtime dopo un solo push senza redeploy da variabili aggiornate.
+          <h1 className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">Area personale</h1>
+          <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-gray-700">
+            Per accedere servono progetto Supabase e variabili{' '}
+            <code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_URL</code>,{' '}
+            <code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_ANON_KEY</code> nel file locale e negli ambienti di hosting
+            (vedi <code className="rounded bg-white px-1 text-xs">.env.example</code>). Poi crea account o accedi dalla home.
           </p>
         </div>
       </div>
@@ -152,9 +182,9 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-10 md:gap-10">
       {sb ? (
         <CloudMemberAuthPanel
-          ariaLabel="Account per l'oasi personale"
+          ariaLabel="Account per l'area personale"
           headline="Solo utenti registrati"
-          description="Accedi con le stesse credenziali dell’area cloud Alveo: abilitano oasi personale e diario. Se non sei ancora iscritta o iscritto, puoi crearle qui."
+          description="Accedi con le stesse credenziali dell’area cloud Alveo: abilitano area personale e diario. Se non sei ancora iscritta o iscritto, puoi crearle qui."
           logoutButtonLabel="Disconnettiti dall'account Alveo"
           supabase={sb}
           session={session}
@@ -182,7 +212,7 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
               Riservato agli utenti collegati
             </p>
             <h1 className="mb-4 font-['Space_Grotesk',sans-serif] text-3xl font-bold tracking-tight text-[#162327] md:text-4xl">
-              Oasi personale
+              Area personale
             </h1>
             <p className="max-w-2xl text-[15px] leading-relaxed text-gray-700 md:text-base">
               Accessi rapidi, idee ruotate dall&apos;ACT, suggerimenti di ascolto e la stanza meditazione compaiono{' '}
@@ -202,7 +232,7 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
           {todayLabel}
         </p>
         <h1 className="relative mb-3 max-w-[22ch] font-['Space_Grotesk',sans-serif] text-3xl font-bold leading-tight text-[#1A1A1A] md:max-w-none md:text-4xl">
-          Oasi personale
+          Area personale
         </h1>
         <p className="relative max-w-2xl text-[15px] font-medium leading-relaxed text-gray-700 md:text-base">
           Un contenitore lento, pensato senza pressione di risultati. L&apos;ansia può essere osservata come un
@@ -281,49 +311,135 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-10">
         <div className="space-y-8 lg:col-span-7">
-          <section
-            className="relative overflow-hidden rounded-2xl border-[3px] border-[#1A1A1A] bg-[#F9E784] p-6 shadow-[4px_4px_0px_#1A1A1A]"
-            aria-labelledby="oasis-audio-heading"
-          >
-            <h2 id="oasis-audio-heading" className="sr-only">
-              Audiolibro in riproduzione
-            </h2>
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+          <section className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#F9E784] p-6 shadow-[4px_4px_0px_#1A1A1A] md:p-7" aria-labelledby="oasis-audiobooks-spot-heading">
+            <div className="mb-5 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <span className="mb-3 inline-block rounded-md border-2 border-black bg-white px-2 py-1 text-xs font-bold uppercase tracking-wider shadow-[1px_1px_0px_#1A1A1A]">
-                  In primo piano (demo)
+                  Dal catalogo audiolibri
                 </span>
-                <h3 className="text-2xl font-bold">La Trappola della Felicità</h3>
-                <p className="font-medium text-gray-800">
-                  Cap. 4: I pensieri non sono fatti veri (Russ Harris)
+                <h2 id="oasis-audiobooks-spot-heading" className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">
+                  {spotlightAudiobook ? spotlightAudiobook.title : 'Strumenti e audiolibri'}
+                </h2>
+                {spotlightAudiobook ?
+                  <>
+                    <p className="mt-1 text-sm font-semibold text-gray-800">{spotlightAudiobook.author}</p>
+                    <p className="mt-3 max-w-prose text-[15px] leading-relaxed text-gray-800">{spotlightAudiobook.synopsis}</p>
+                  </>
+                : (
+                  <p className="mt-3 max-w-prose text-[15px] leading-relaxed text-gray-800">
+                    Apri gli strumenti per la lista di capitoli e la riproduzione dal catalogo caricato sulla tua
+                    copia dell&apos;app.
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelectNav('tools')}
+              className="w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-3.5 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[3px_3px_0px_#ffffff] transition hover:bg-[#2a383f] sm:w-auto sm:min-w-[14rem] sm:px-8"
+            >
+              Apri strumenti e catalogo completo
+            </button>
+          </section>
+
+          <section
+            className="rounded-2xl border-[3px] border-[#1A1A1A] bg-white p-5 shadow-[3px_3px_0px_#1A1A1A] md:p-6"
+            aria-labelledby="oasis-saved-listening-heading"
+          >
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <span className="mb-2 inline-flex items-center gap-2 rounded-lg border-2 border-[#1A1A1A] bg-[#ecfdf5] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider">
+                  <span aria-hidden>❤️</span> Salvati dall’ascolto
+                </span>
+                <h2 id="oasis-saved-listening-heading" className="mt-3 font-['Space_Grotesk',sans-serif] text-xl font-bold text-[#162327]">
+                  Capitoli che ti ispirano
+                </h2>
+                <p className="mt-2 max-w-prose text-sm leading-relaxed text-gray-700">
+                  I capitoli contrassegnati con «mi piace» dall’audioplayer restano qui sul dispositivo. Apri nel lettore quando vuoi ripartire da quel punto.
                 </p>
               </div>
-              <div className="flex h-24 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 border-black bg-white shadow-[2px_2px_0px_#1A1A1A]">
-                <div className="flex h-full w-full items-center justify-center bg-[#E57A44] text-xl font-bold text-white">
-                  ACT
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
               <button
                 type="button"
-                onClick={() => setAudioPlaying((p) => !p)}
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-[#1A1A1A] bg-white text-xl shadow-[2px_2px_0px_#1A1A1A] transition active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
-                aria-pressed={audioPlaying}
-                aria-label={audioPlaying ? 'Metti in pausa' : 'Riproduci'}
+                onClick={() => {
+                  onSelectNav('tools')
+                  showToast('Vai allo strumento audiolibri per il catalogo completo.')
+                }}
+                className="shrink-0 rounded-xl border-[3px] border-[#1A1A1A] bg-[#fafafa] px-4 py-2 text-xs font-bold uppercase tracking-[0.08em] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] transition hover:bg-[#f4f4f5]"
               >
-                {audioPlaying ? '⏸' : '▶'}
+                Catalogo
               </button>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex justify-between text-sm font-medium">
-                  <span>12:40</span>
-                  <span>34:15</span>
-                </div>
-                <div className="h-3 w-full overflow-hidden rounded-lg border-2 border-[#1A1A1A] bg-white">
-                  <div className="h-full border-r-2 border-[#1A1A1A] bg-[#1A1A1A]" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
             </div>
+            {savedListening.length === 0 ?
+              <p className="rounded-xl border-2 border-dashed border-[#1A1A1A]/30 bg-[#faf8f5] px-4 py-6 text-center text-sm text-gray-600">
+                Non hai ancora salvato capitoli. In riproduzione, tocca il cuore sulla barra in basso o accanto alla lista capitoli.
+              </p>
+            : (
+              <ul className="space-y-3" role="list">
+                {savedListening.map((s) => {
+                  let dateLabel = ''
+                  try {
+                    dateLabel = new Intl.DateTimeFormat('it-IT', {
+                      day: 'numeric',
+                      month: 'short',
+                    }).format(new Date(s.savedAt))
+                  } catch {
+                    dateLabel = ''
+                  }
+                  return (
+                    <li key={`${s.audiobookId}-${s.chapterIndex}`}>
+                      <div className="flex gap-3 rounded-xl border-[3px] border-[#1A1A1A] bg-[#fafefa] p-3 shadow-[2px_2px_0px_#1A1A1A] md:p-4">
+                        <div className="h-14 w-11 shrink-0 overflow-hidden rounded-md border border-[#1A1A1A]/20 bg-[#e8dfd4]/60">
+                          {s.coverSrc ?
+                            <img src={s.coverSrc} alt="" className="h-full w-full object-cover" draggable={false} />
+                          : (
+                            <div className="flex h-full w-full items-center justify-center text-[9px] font-bold text-[#162327]/50">
+                              ♪
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 font-['Space_Grotesk',sans-serif] text-[14px] font-bold leading-snug text-[#162327]">
+                            {s.chapterTitle}
+                          </p>
+                          <p className="mt-1 text-[12px] font-semibold text-gray-700">
+                            {s.audiobookTitle} · {s.author}
+                          </p>
+                          <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
+                            Capitolo {s.chapterIndex + 1}{dateLabel ? ` · salvato il ${dateLabel}` : ''}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="rounded-lg border-[3px] border-[#1A1A1A] bg-[#1ed760]/90 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.06em] text-[#0a0a0a] shadow-[2px_2px_0px_#1A1A1A] transition hover:brightness-105 active:translate-y-[1px]"
+                              onClick={() => {
+                                stashAudiobookOpenIntent({
+                                  audiobookId: s.audiobookId,
+                                  chapterIndex: s.chapterIndex,
+                                })
+                                showToast('Apertura in Strumenti e audiolibri…')
+                                onSelectNav('tools')
+                              }}
+                            >
+                              Apri nel lettore
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-lg border-2 border-[#1A1A1A]/35 bg-transparent px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-gray-700 transition hover:bg-white"
+                              onClick={() => {
+                                removeSavedAudiobookChapter(s.audiobookId, s.chapterIndex)
+                                showToast('Rimosso dai salvati.')
+                              }}
+                            >
+                              Rimuovi
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </section>
 
           <section aria-labelledby="oasis-exercises-heading">
@@ -333,17 +449,19 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <button
                 type="button"
+                onClick={() => onSelectNav('diary')}
                 className="rounded-2xl border-[3px] border-[#1A1A1A] bg-white p-5 text-left shadow-[4px_4px_0px_#1A1A1A] transition hover:bg-gray-50"
               >
-                <h3 className="mb-1 text-lg font-bold">Defusione cognitiva</h3>
-                <p className="text-sm text-gray-600">&quot;Io sto avendo il pensiero che…&quot;</p>
+                <h3 className="mb-1 text-lg font-bold">Diario di defusione</h3>
+                <p className="text-sm text-gray-600">Scrivi con le annotazioni salvate quando sei collegata o collegato al cloud.</p>
               </button>
               <button
                 type="button"
+                onClick={() => onSelectNav('med')}
                 className="rounded-2xl border-[3px] border-[#1A1A1A] bg-white p-5 text-left shadow-[4px_4px_0px_#1A1A1A] transition hover:bg-gray-50"
               >
-                <h3 className="mb-1 text-lg font-bold">Spazio di espansione</h3>
-                <p className="text-sm text-gray-600">Lasciare spazio alle sensazioni nel corpo.</p>
+                <h3 className="mb-1 text-lg font-bold">Respiro e meditazioni</h3>
+                <p className="text-sm text-gray-600">Apri le meditazioni guidate della app: ciclo di ispirazioni e playlist audio operative.</p>
               </button>
             </div>
           </section>
@@ -351,28 +469,31 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
 
         <div className="lg:col-span-5">
           <section
-            className="flex min-h-[340px] flex-col rounded-2xl border-[3px] border-[#1A1A1A] bg-[#A5C4D4] p-6 shadow-[4px_4px_0px_#1A1A1A] lg:min-h-full lg:sticky lg:top-4"
+            className="flex flex-col rounded-2xl border-[3px] border-[#1A1A1A] bg-[#A5C4D4] p-6 shadow-[4px_4px_0px_#1A1A1A] lg:sticky lg:top-4"
             aria-labelledby="oasis-meditation-heading"
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 id="oasis-meditation-heading" className="font-['Space_Grotesk',sans-serif] text-2xl font-bold">
-                Stanza meditazione
+                Meditazioni
               </h2>
               <span className="text-2xl" aria-hidden>
                 ☁️
               </span>
             </div>
-            <div className="mb-4 rounded-2xl border-[3px] border-[#1A1A1A] bg-white p-4 shadow-[2px_2px_0px_#1A1A1A]">
-              <h3 className="text-lg font-bold">Radicamento nel presente</h3>
-              <p className="mb-4 text-sm text-gray-600">Voce: Chiara • 10 min</p>
-              <button
-                type="button"
-                className="w-full rounded-lg border-2 border-[#1A1A1A] bg-[#1A1A1A] py-3 font-bold text-white shadow-[2px_2px_0px_#1A1A1A] transition hover:bg-gray-800"
-              >
-                Avvia meditazione
-              </button>
-            </div>
-            <h3 className="mb-3 font-bold">Stato d&apos;animo (opzionale)</h3>
+            <p className="mb-5 text-sm leading-relaxed text-gray-900">
+              La stanza vera è nella sezione «Meditazioni guidate»: lì parte il ciclo con voce sintetizzata e tracce quando sono disponibili.
+            </p>
+            <button
+              type="button"
+              onClick={() => onSelectNav('med')}
+              className="mb-6 w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-3.5 font-bold text-white shadow-[3px_3px_0px_#eaf4f9] transition hover:bg-[#2a383f]"
+            >
+              Vai alle meditazioni guidate
+            </button>
+            <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.1em] text-gray-900">Come ti trovi ora (solo su questo dispositivo)</h3>
+            <p className="mb-3 text-xs leading-relaxed text-gray-800">
+              Opzionale: serve a ricordarti il contesto al prossimo accesso alla stessa area personale sul browser che stai usando.
+            </p>
             <div className="flex flex-wrap gap-2">
               {MOODS.map((mood) => {
                 const on = selectedMood === mood
@@ -380,7 +501,7 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
                   <button
                     key={mood}
                     type="button"
-                    onClick={() => setSelectedMood((cur) => (cur === mood ? null : mood))}
+                    onClick={() => toggleMood(mood)}
                     className={
                       on
                         ? 'rounded-full border-2 border-black bg-[#1A1A1A] px-4 py-1.5 text-sm font-semibold text-white shadow-[2px_2px_0px_#1A1A1A]'

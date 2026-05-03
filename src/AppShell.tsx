@@ -9,6 +9,7 @@ import HomeLandingPage from './pages/HomeLandingPage'
 import PersonalOasisPage from './pages/PersonalOasisPage'
 import DefusionDiaryPage from './pages/DefusionDiaryPage'
 import GuidedMeditationPage from './pages/GuidedMeditationPage'
+import RelaxationTechniquesPage from './pages/RelaxationTechniquesPage'
 import ToolsAudiobooksPage from './pages/ToolsAudiobooksPage'
 
 function NavLinks({
@@ -233,9 +234,11 @@ export default function AppShell() {
             ) : activeNav === 'oasi' ? (
               <PersonalOasisPage onSelectNav={goToSection} />
             ) : activeNav === 'tools' ? (
-              <ToolsAudiobooksPage />
+              <ToolsAudiobooksPage onSelectNav={goToSection} />
             ) : activeNav === 'med' ? (
               <GuidedMeditationPage />
+            ) : activeNav === 'relax' ? (
+              <RelaxationTechniquesPage onSelectNav={goToSection} />
             ) : activeNav === 'diary' ? (
               <DefusionDiaryPage />
             ) : (

@@ -4,13 +4,12 @@ import { useServiceCardTilt } from '../hooks/useServiceCardTilt'
 import type { NavId } from '../nav'
 
 type Props = {
-  onEnterOasis: () => void
   onSelectNav: (id: NavId) => void
 }
 
-export default function LandingServiceProposals({ onEnterOasis, onSelectNav }: Props) {
+export default function LandingServiceProposals({ onSelectNav }: Props) {
   const listRef = useRef<HTMLUListElement>(null)
-  const { cloudEnabled: diaryCloudOn, canUseDiary, canUseOasis } = useDiaryAuth()
+  const { cloudEnabled: diaryCloudOn, canUseDiary } = useDiaryAuth()
   useServiceCardTilt(listRef)
 
   return (
@@ -30,7 +29,7 @@ export default function LandingServiceProposals({ onEnterOasis, onSelectNav }: P
         </h2>
         <p className="mt-4 text-[15px] leading-relaxed text-[#374550] md:text-base">
           Contenuti pensati da affrontare senza affanno: parole da ascolto, allenamenti di attenzione e piccoli esercizi
-          per accompagnare corpo e respiro. L'oasi personale e il diario di defusione si aprono dopo registrazione
+          per accompagnare corpo e respiro. L&apos;area personale e il diario di defusione si aprono dopo registrazione
           e login sul cloud (quando configurato): due spazi dove tornare nei momenti agitati o annotare prendendo distanza,
           ispirati all'ACT.
         </p>
@@ -102,33 +101,15 @@ export default function LandingServiceProposals({ onEnterOasis, onSelectNav }: P
               Tecniche di rilassamento
             </h3>
             <p className="mt-2 flex-1 text-sm leading-relaxed text-gray-800 md:text-[15px]">
-              Suggerimenti per sciogliere tensione muscolare, rallentare e ritrovare un ritmo corporeo più possibile,
-              raccolti insieme ad altri strumenti utili nell'oasi.
+              Pagina dedicata a rilassamento, respirazione, mindfulness e micro-esercizi: hub separato dall&apos;area
+              personale, con ciò che è già disponibile e spazio per nuovi protocolli.
             </p>
             <button
               type="button"
-              onClick={onEnterOasis}
-              title={
-                canUseOasis ?
-                  'Apri il tuo spazio personale'
-                : "Servizio riservato agli utenti registrati · accesso dall'area account"
-              }
-              className={`mt-6 flex min-h-[4.25rem] w-full flex-col items-center justify-center gap-1 cursor-pointer rounded-xl border-[3px] border-[#1A1A1A] bg-[#f9e784] px-2 py-3 text-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_#1A1A1A] active:translate-x-[1px] active:translate-y-[1px]`}
+              onClick={() => onSelectNav('relax')}
+              className="mt-6 w-full cursor-pointer rounded-xl border-[3px] border-[#1A1A1A] bg-[#f9e784] py-3.5 text-sm font-bold text-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_#1A1A1A] active:translate-x-[1px] active:translate-y-[1px]"
             >
-              {canUseOasis ? (
-                <span className="text-sm font-bold">Entra nell'oasi</span>
-              ) : (
-                <>
-                  <span className="text-center text-xs font-bold leading-snug md:text-[13px]">
-                    Servizio riservato agli utenti registrati
-                  </span>
-                  <span className="text-center text-[11px] font-semibold uppercase tracking-[0.08em] opacity-95">
-                    {diaryCloudOn ?
-                      "Accedi per entrare nell'oasi personale"
-                    : 'Vedi pagina oasi per requisiti'}
-                  </span>
-                </>
-              )}
+              Apri le tecniche di rilassamento
             </button>
           </article>
         </li>

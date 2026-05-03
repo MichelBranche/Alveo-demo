@@ -4,7 +4,7 @@ import { NAV } from '../nav'
 export default function ComingSoon({
   navId,
 }: {
-  navId: Exclude<NavId, 'home' | 'oasi' | 'tools' | 'med' | 'diary'>
+  navId: Exclude<NavId, 'home' | 'oasi' | 'tools' | 'med' | 'diary' | 'relax'>
 }) {
   const meta = NAV.find((n) => n.id === navId)
   const title = meta?.label ?? 'Sezione'
@@ -20,7 +20,7 @@ export default function ComingSoon({
       <h1 className="mb-4 font-['Space_Grotesk',sans-serif] text-3xl font-bold text-[#1A1A1A]">{title}</h1>
       <p className="text-gray-600">
         Questa parte di Alveo è ancora in lavorazione. Dalla barra di navigazione si può tornare alla home o
-        all&apos;oasi personale.
+        all&apos;area personale.
       </p>
     </div>
   )

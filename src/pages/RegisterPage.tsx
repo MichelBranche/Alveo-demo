@@ -169,7 +169,7 @@ export default function RegisterPage() {
                   Account creato: sei dentro
                 </p>
                 <p className="mt-3 text-[15px] leading-relaxed text-gray-800">
-                  La sessione è attiva: puoi usare diario e oasi collegate al cloud. Se qualcosa non si aggiorna subito,
+                  La sessione è attiva: puoi usare diario e area personale collegati al cloud. Se qualcosa non si aggiorna subito,
                   torna alla home e riapri la sezione.
                 </p>
               </>

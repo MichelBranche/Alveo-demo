@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { type DiaryOAuthProvider, signInWithDiaryOAuth } from '../lib/diaryCloud'
 
@@ -29,6 +29,28 @@ const discordIcon: ReactNode = (
   </svg>
 )
 
+const OAUTH_UI: Record<
+  DiaryOAuthProvider,
+  { signin: string; signup: string; busy: string; icon: ReactNode; accentClass: string }
+> = {
+  google: {
+    signin: 'Continua con Google',
+    signup: 'Registrati o accedi con Google',
+    busy: 'Reindirizzamento verso Google…',
+    icon: googleIcon,
+    accentClass: 'bg-white hover:bg-[#faf8f5]',
+  },
+  discord: {
+    signin: 'Continua con Discord',
+    signup: 'Registrati o accedi con Discord',
+    busy: 'Reindirizzamento verso Discord…',
+    icon: discordIcon,
+    accentClass: 'border-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/15',
+  },
+}
+
+export const DIARY_OAUTH_STACK_ORDER = ['google', 'discord'] as const satisfies readonly DiaryOAuthProvider[]
+
 const baseBtnClass =
   'flex w-full items-center justify-center gap-3 rounded-2xl border-[3px] border-[#1A1A1A] px-4 py-3.5 text-[15px] font-semibold text-[#1A1A1A] shadow-[4px_4px_0px_#1A1A1A] transition disabled:opacity-55'
 
@@ -51,28 +73,16 @@ export function OAuthSignInButton({
 }: OAuthSignInButtonProps) {
   const [busy, setBusy] = useState(false)
 
-  const { label, busyLabel, icon, providerName } = useMemo(() => {
-    const name = provider === 'google' ? 'Google' : 'Discord'
-    if (provider === 'google') {
-      return {
-        label: variant === 'signup' ? 'Registrati o accedi con Google' : 'Continua con Google',
-        busyLabel: 'Reindirizzamento verso Google…',
-        icon: googleIcon,
-        providerName: name,
-      }
-    }
-    return {
-      label: variant === 'signup' ? 'Registrati o accedi con Discord' : 'Continua con Discord',
-      busyLabel: 'Reindirizzamento verso Discord…',
-      icon: discordIcon,
-      providerName: name,
-    }
-  }, [provider, variant])
+  const cfg = OAUTH_UI[provider]
+  const providerName = provider === 'google' ? 'Google' : 'Discord'
 
-  const discordStyle =
-    provider === 'discord'
-      ? 'border-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/15'
-      : 'bg-white hover:bg-[#faf8f5]'
+  const label = variant === 'signup' ? cfg.signup : cfg.signin
+  const busyLabel = cfg.busy
+  const icon = cfg.icon
+
+  const mergedClass =
+    className ??
+    `${baseBtnClass} ${cfg.accentClass}`
 
   const onClick = useCallback(async () => {
     setBusy(true)
@@ -96,7 +106,7 @@ export function OAuthSignInButton({
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       onClick={() => void onClick()}
-      className={className ?? `${baseBtnClass} ${discordStyle}`}
+      className={mergedClass}
     >
       {icon}
       {busy ? busyLabel : label}
@@ -104,13 +114,14 @@ export function OAuthSignInButton({
   )
 }
 
-/** Compatto: Google + Discord uno sotto l’altro */
+/** Compatto: Google + Discord */
 export function OAuthSignInStack(props: Omit<OAuthSignInButtonProps, 'provider'> & { stackClassName?: string }) {
   const { stackClassName, ...rest } = props
   return (
     <div className={stackClassName ?? 'flex flex-col gap-3'}>
-      <OAuthSignInButton {...rest} provider="google" />
-      <OAuthSignInButton {...rest} provider="discord" />
+      {DIARY_OAUTH_STACK_ORDER.map((p) => (
+        <OAuthSignInButton key={p} {...rest} provider={p} />
+      ))}
     </div>
   )
 }
