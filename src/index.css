@@ -3,19 +3,57 @@
 /* Evita strisce bianche sotto l’app (browser bar / safe-area / #root più basso della viewport). */
 html {
   min-height: 100dvh;
+  max-width: 100%;
+  overflow-x: clip;
   background-color: #f4f0ea;
 }
 
 body {
   margin: 0;
   min-height: 100dvh;
+  max-width: 100%;
+  overflow-x: clip;
   background-color: #f4f0ea;
   font-family: Inter, system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 #root {
   min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   isolation: isolate;
+}
+
+/* PWA / notch: padding orizzontale e verticale superiore coerente con env(safe-area-inset-*). */
+.alveo-px-screen {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+@media (min-width: 768px) {
+  .alveo-px-screen {
+    padding-left: max(2rem, env(safe-area-inset-left, 0px));
+    padding-right: max(2rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+.alveo-pt-screen {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+@media (min-width: 768px) {
+  .alveo-pt-screen {
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  }
+}
+
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: rgba(26, 26, 26, 0.08);
 }
 
 h1,

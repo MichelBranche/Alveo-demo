@@ -523,7 +523,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 pb-10">
+    <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-8 pb-10">
       <header className="rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-[#faf8f5] to-[#fef6d8] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-8">
         <p className="mb-2 inline-flex rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
           Community

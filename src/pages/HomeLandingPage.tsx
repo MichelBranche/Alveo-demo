@@ -17,7 +17,7 @@ export default function HomeLandingPage({
   const { canUseOasis } = useDiaryAuth()
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 pb-14 md:gap-14 md:pb-16">
+    <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-10 pb-14 md:gap-14 md:pb-16">
       <section className="relative overflow-hidden rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#c9dce6] via-[#eae5df] to-[#f9e784]/90 shadow-[5px_5px_0px_#1A1A1A]">
         <div className="pointer-events-none absolute -left-24 top-1/2 h-56 w-56 -translate-y-1/2 rounded-full border-[3px] border-[#1A1A1A]/12 bg-white/35 blur-sm md:h-72 md:w-72" />
         <div className="pointer-events-none absolute -right-12 -top-8 h-32 w-32 rounded-full border-[3px] border-[#1A1A1A]/18 bg-[#d8cde6]/55 md:h-40 md:w-40" />
@@ -27,9 +27,9 @@ export default function HomeLandingPage({
             Spazio sicuro · ACT per l'ansia
           </p>
 
-          <h1 className="font-['Space_Grotesk',sans-serif] text-4xl font-bold leading-[1.06] tracking-tight text-[#162327] md:text-[2.85rem]">
+          <h1 className="text-balance font-['Space_Grotesk',sans-serif] text-4xl font-bold leading-[1.06] tracking-tight text-[#162327] md:text-[2.85rem]">
             Alveo
-            <span className="mt-4 block font-['Space_Grotesk',sans-serif] text-3xl md:text-[2rem] md:leading-snug">
+            <span className="mt-4 block text-balance font-['Space_Grotesk',sans-serif] text-3xl md:text-[2rem] md:leading-snug">
               Un passo alla volta, vicino al presente.
             </span>
           </h1>
@@ -40,7 +40,7 @@ export default function HomeLandingPage({
             e un punto fisso dove tornare nei momenti più agitati.
           </p>
 
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="mt-10 flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
             <button
               type="button"
               onClick={onEnterOasis}
@@ -49,14 +49,14 @@ export default function HomeLandingPage({
                   undefined
                 : "Servizio riservato agli utenti registrati. All'ingresso trovi accesso o registrazione con account cloud."
               }
-              className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-8 py-4 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#ffffff] outline-none ring-offset-[#eae5df] transition hover:bg-[#2a383f] focus-visible:ring-2 focus-visible:ring-[#1A1A1A] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#ffffff]"
+              className="w-full rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-4 py-4 text-center font-['Space_Grotesk',sans-serif] text-sm font-bold leading-snug text-white shadow-[4px_4px_0px_#ffffff] outline-none ring-offset-[#eae5df] transition hover:bg-[#2a383f] focus-visible:ring-2 focus-visible:ring-[#1A1A1A] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#ffffff] sm:w-auto sm:px-8 sm:text-base"
             >
               {canUseOasis ? "Apri l'area personale" : "Verso l'area personale (solo utenti registrati)"}
             </button>
             <button
               type="button"
               onClick={() => onSelectNav('med')}
-              className="rounded-2xl border-[3px] border-[#1A1A1A] bg-white px-8 py-4 font-semibold text-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_#1A1A1A] active:translate-x-[1px] active:translate-y-[1px]"
+              className="w-full rounded-2xl border-[3px] border-[#1A1A1A] bg-white px-4 py-4 text-center text-sm font-semibold text-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_#1A1A1A] active:translate-x-[1px] active:translate-y-[1px] sm:w-auto sm:px-8 sm:text-base"
             >
               Apri le meditazioni
             </button>

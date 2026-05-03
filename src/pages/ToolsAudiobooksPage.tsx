@@ -202,7 +202,10 @@ export default function ToolsAudiobooksPage({ onSelectNav }: Props) {
   }
 
   return (
-    <div ref={scrollAnchorRef} className="mx-auto flex w-full max-w-5xl flex-col gap-12 pb-6 md:gap-14 md:pb-4">
+    <div
+      ref={scrollAnchorRef}
+      className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-12 pb-6 md:gap-14 md:pb-4"
+    >
       <header className="rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-white to-[#eae5df] p-8 shadow-[5px_5px_0px_#1A1A1A] md:p-10">
         <p className="mb-4 inline-flex items-center rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
           Strumenti

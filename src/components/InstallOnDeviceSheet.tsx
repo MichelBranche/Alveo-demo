@@ -62,7 +62,10 @@ export default function InstallOnDeviceSheet({ open, onClose }: Props) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center" role="presentation">
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:items-center sm:pb-4"
+      role="presentation"
+    >
       <button
         type="button"
         className="absolute inset-0 bg-black/45"
@@ -73,7 +76,7 @@ export default function InstallOnDeviceSheet({ open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="install-sheet-title"
-        className="relative z-[61] w-full max-w-md rounded-2xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] p-6 shadow-[6px_6px_0px_#1A1A1A]"
+        className="relative z-[61] w-full min-w-0 max-w-md rounded-2xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] p-6 pb-[max(1.5rem,calc(0.75rem+env(safe-area-inset-bottom,0px)))] shadow-[6px_6px_0px_#1A1A1A] sm:pb-6"
       >
         <h2
           id="install-sheet-title"

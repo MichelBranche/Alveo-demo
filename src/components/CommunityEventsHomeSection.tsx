@@ -50,7 +50,7 @@ export default function CommunityEventsHomeSection({ onSelectNav }: { onSelectNa
 
   return (
     <section
-      className="rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#e8e0f0] via-[#faf8f5] to-[#dcecf2] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10"
+      className="min-w-0 rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#e8e0f0] via-[#faf8f5] to-[#dcecf2] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10"
       aria-labelledby="community-events-home-heading"
     >
       <p className="mb-3 inline-flex items-center rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
@@ -74,9 +74,10 @@ export default function CommunityEventsHomeSection({ onSelectNav }: { onSelectNa
         {loading ?
           <p className="text-sm font-medium text-[#5c6b72]">Carico il calendario…</p>
         : hadError ?
-          <p className="text-sm font-medium text-[#8b4513]">
+          <p className="break-words text-sm font-medium text-[#8b4513]">
             Calendario non disponibile (tabella non creata o errore di rete). Quando avrai eseguito{' '}
-            <code className="rounded bg-white/80 px-1 text-xs">supabase/community_events.sql</code>, ricarica la pagina.
+            <code className="break-all rounded bg-white/80 px-1 text-xs">supabase/community_events.sql</code>, ricarica
+            la pagina.
           </p>
         : events.length === 0 ?
           <div className="rounded-2xl border-2 border-dashed border-[#1A1A1A]/35 bg-white/50 px-4 py-8 text-center">

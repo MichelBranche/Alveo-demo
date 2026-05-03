@@ -5,9 +5,9 @@ export const PRIVACY_POLICY_UPDATED_ISO = '2026-05-02'
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="flex min-h-dvh flex-col bg-[#F4F0EA] text-gray-900">
+    <div className="flex min-h-dvh w-full min-w-0 flex-col bg-[#F4F0EA] text-gray-900">
       <header className="shrink-0 border-b-2 border-[#1A1A1A] bg-[#F4F0EA]">
-        <div className="flex items-center gap-3 px-4 py-3 md:px-8 md:py-4">
+        <div className="alveo-px-screen alveo-pt-screen flex items-center gap-3 pb-3 md:pb-4">
           <CurtainLink
             to="/"
             className="flex shrink-0 items-center gap-1.5 rounded-lg border-2 border-[#1A1A1A] bg-white px-2 py-2 text-sm font-semibold text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] transition hover:bg-[#eae5df] md:px-3"
@@ -21,7 +21,7 @@ export default function PrivacyPolicyPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 pb-[max(2.5rem,env(safe-area-inset-bottom))] md:py-12">
+      <main className="alveo-px-screen mx-auto w-full min-w-0 max-w-3xl flex-1 py-8 pb-[max(2.5rem,calc(1rem+env(safe-area-inset-bottom,0px)))] md:py-12">
         <article className="rounded-2xl border-[3px] border-[#1A1A1A] bg-white p-6 shadow-[4px_4px_0px_#1A1A1A] md:p-10">
           <p className="font-['Space_Grotesk',sans-serif] text-xs font-bold uppercase tracking-[0.14em] text-gray-600">
             Documento legale

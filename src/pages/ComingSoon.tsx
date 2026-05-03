@@ -10,7 +10,7 @@ export default function ComingSoon({
   const title = meta?.label ?? 'Sezione'
 
   return (
-    <div className="mx-auto flex min-h-[50vh] max-w-xl flex-col items-center justify-center text-center px-4">
+    <div className="mx-auto flex min-h-[50vh] w-full min-w-0 max-w-xl flex-col items-center justify-center px-4 text-center">
       <span className="mb-6 text-5xl" aria-hidden>
         {meta?.emoji ?? '✨'}
       </span>

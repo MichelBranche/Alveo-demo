@@ -10,10 +10,10 @@ export default function SupportAlveoSection() {
 
   return (
     <section
-      className="rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#fef6d8] via-[#faf8f5] to-[#d4ebe0] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10"
+      className="min-w-0 rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#fef6d8] via-[#faf8f5] to-[#d4ebe0] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10"
       aria-labelledby="support-alveo-heading"
     >
-      <div className="flex flex-col gap-8 md:flex-row md:items-start md:gap-10">
+      <div className="flex min-w-0 flex-col gap-8 md:flex-row md:items-start md:gap-10">
         <div
           className="mx-auto flex h-[5.5rem] w-[5.5rem] shrink-0 items-center justify-center rounded-2xl border-[3px] border-[#1A1A1A] bg-transparent shadow-[3px_3px_0px_#1A1A1A] md:mx-0 md:h-32 md:w-32"
           aria-hidden

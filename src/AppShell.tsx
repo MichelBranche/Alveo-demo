@@ -189,7 +189,7 @@ export default function AppShell() {
 
       <aside
         id="app-nav-drawer"
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,90vw)] flex-col justify-between border-r-4 border-[#1A1A1A] bg-[#EAE5DF] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] shadow-xl transition-transform duration-200 ease-out sm:w-72 md:w-72 md:shadow-2xl ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,90vw)] flex-col justify-between border-r-4 border-[#1A1A1A] bg-[#EAE5DF] pe-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] ps-[max(1.5rem,env(safe-area-inset-left,0px))] pt-[max(1.5rem,env(safe-area-inset-top,0px))] shadow-xl transition-transform duration-200 ease-out sm:w-72 md:w-72 md:shadow-2xl ${
           menuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         aria-hidden={!menuOpen}
@@ -281,7 +281,7 @@ export default function AppShell() {
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="shrink-0 border-b-2 border-[#1A1A1A] bg-[#F4F0EA]">
-          <div className="flex items-center gap-2 px-4 py-3 md:gap-3 md:px-8 md:py-4">
+          <div className="alveo-px-screen alveo-pt-screen flex items-center gap-2 pb-3 md:gap-3 md:pb-4">
             {canGoBack ? (
               <button
                 type="button"
@@ -313,7 +313,7 @@ export default function AppShell() {
         </header>
 
         <Lenis
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]"
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]"
           options={{
             lerp: 0.09,
             wheelMultiplier: 0.85,
@@ -322,7 +322,7 @@ export default function AppShell() {
             autoRaf: true,
           }}
         >
-          <div className="p-4 sm:p-6 md:p-8 md:pb-10">
+          <div className="box-border min-w-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:p-6 sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] md:p-8 md:pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]">
             {activeNav === 'home' ? (
               <HomeLandingPage onEnterOasis={() => goToSection('oasi')} onSelectNav={goToSection} />
             ) : activeNav === 'oasi' ? (

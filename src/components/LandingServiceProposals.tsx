@@ -14,7 +14,7 @@ export default function LandingServiceProposals({ onSelectNav }: Props) {
 
   return (
     <section
-      className="rounded-3xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] px-6 py-9 shadow-[5px_5px_0px_#1A1A1A] md:px-10 md:py-11"
+      className="min-w-0 rounded-3xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] px-4 py-9 shadow-[5px_5px_0px_#1A1A1A] sm:px-6 md:px-10 md:py-11"
       aria-labelledby="landing-services-heading"
     >
       <div className="mb-8 max-w-2xl md:mb-10">
@@ -43,7 +43,7 @@ export default function LandingServiceProposals({ onSelectNav }: Props) {
           aria-label="Proposte contenuti · scorrimento orizzontale"
           className="flex snap-x snap-proximity list-none gap-6 overflow-x-auto overflow-y-visible overscroll-x-contain pb-3 pt-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] [scrollbar-color:rgba(26,26,26,0.35)_transparent]"
         >
-        <li className="snap-start perspective-[1000px] w-[clamp(17rem,calc((100cqw-3rem)/3),24rem)] shrink-0">
+        <li className="snap-start perspective-[1000px] w-[min(24rem,calc(100cqw-1rem))] max-w-full shrink-0">
           <article
             data-service-card
             className="flex h-full flex-col rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-white to-[#eae5df] p-6 shadow-[4px_4px_0px_#1A1A1A] [transform-style:preserve-3d]"
@@ -65,7 +65,7 @@ export default function LandingServiceProposals({ onSelectNav }: Props) {
             </button>
           </article>
         </li>
-        <li className="snap-start perspective-[1000px] w-[clamp(17rem,calc((100cqw-3rem)/3),24rem)] shrink-0">
+        <li className="snap-start perspective-[1000px] w-[min(24rem,calc(100cqw-1rem))] max-w-full shrink-0">
           <article
             data-service-card
             className="flex h-full flex-col rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#e8e0f0] via-white to-[#f4f0ea] p-6 shadow-[4px_4px_0px_#1A1A1A] [transform-style:preserve-3d]"
@@ -89,7 +89,7 @@ export default function LandingServiceProposals({ onSelectNav }: Props) {
             </button>
           </article>
         </li>
-        <li className="snap-start perspective-[1000px] w-[clamp(17rem,calc((100cqw-3rem)/3),24rem)] shrink-0">
+        <li className="snap-start perspective-[1000px] w-[min(24rem,calc(100cqw-1rem))] max-w-full shrink-0">
           <article
             data-service-card
             className="flex h-full flex-col rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#f5edd0] via-white to-[#e8dfd4] p-6 shadow-[4px_4px_0px_#1A1A1A] [transform-style:preserve-3d]"
@@ -113,7 +113,7 @@ export default function LandingServiceProposals({ onSelectNav }: Props) {
             </button>
           </article>
         </li>
-        <li className="snap-start perspective-[1000px] w-[clamp(17rem,calc((100cqw-3rem)/3),24rem)] shrink-0">
+        <li className="snap-start perspective-[1000px] w-[min(24rem,calc(100cqw-1rem))] max-w-full shrink-0">
           <article
             data-service-card
             className="flex h-full flex-col rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#e8eef4] via-white to-[#ede8f7] p-6 shadow-[4px_4px_0px_#1A1A1A] [transform-style:preserve-3d]"

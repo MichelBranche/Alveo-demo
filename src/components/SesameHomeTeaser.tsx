@@ -3,7 +3,7 @@ import { openSesamePreview, SESAME_PREVIEW_URL } from '../lib/openSesamePreview'
 export default function SesameHomeTeaser() {
   return (
     <section
-      className="rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#e8e0f0] via-[#faf8f5] to-[#dcecf2] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-8"
+      className="min-w-0 rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#e8e0f0] via-[#faf8f5] to-[#dcecf2] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-8"
       aria-labelledby="sesame-home-heading"
     >
       <p className="mb-3 inline-flex items-center rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">

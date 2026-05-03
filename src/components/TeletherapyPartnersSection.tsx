@@ -31,7 +31,7 @@ export default function TeletherapyPartnersSection() {
 
   return (
     <section
-      className="rounded-3xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10"
+      className="min-w-0 rounded-3xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10"
       aria-labelledby="teletherapy-heading"
     >
       <p className="mb-3 inline-flex items-center rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">

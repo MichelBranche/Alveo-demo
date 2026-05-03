@@ -551,7 +551,7 @@ export default function GuidedMeditationPage() {
     : null
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-8 pb-8 md:max-w-xl md:gap-10 md:pb-6">
+    <div className="mx-auto flex w-full min-w-0 max-w-lg flex-col gap-8 pb-8 md:max-w-xl md:gap-10 md:pb-6">
       <header>
         <p className="mb-3 inline-flex items-center rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
           Meditazioni guidate

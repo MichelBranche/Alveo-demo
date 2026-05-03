@@ -1,11 +1,12 @@
 {
+  "id": "/",
   "name": "Alveo",
   "short_name": "Alveo",
   "description": "Gestione ansia, ACT, meditazioni e strumenti.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#F4F0EA",
   "theme_color": "#F4F0EA",
   "lang": "it",

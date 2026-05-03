@@ -192,7 +192,7 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
 
   if (!cloudEnabled && !devAuthBypass) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 pb-10">
+      <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 pb-10">
         <div className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] p-8 text-center shadow-[4px_4px_0px_#1A1A1A]">
           <span className="mb-4 inline-flex text-3xl" aria-hidden>
             🏠
@@ -218,7 +218,7 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-10 md:gap-10">
+    <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-8 pb-10 md:gap-10">
       {sb ? (
         <CloudMemberAuthPanel
           ariaLabel="Account per l'area personale"
