@@ -195,12 +195,13 @@ export default function AppShell() {
         aria-hidden={!menuOpen}
       >
         <div>
-          <div className="mb-10 flex items-center justify-between gap-3 md:mb-12">
+          <div className="mb-6 flex items-center justify-between gap-3 md:mb-12">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] shadow-[2px_2px_0px_#1A1A1A] md:h-12 md:w-12 md:shadow-[3px_3px_0px_#1A1A1A]">
-                <svg className="h-5 w-5 md:h-6 md:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] text-lg font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A] md:h-12 md:w-12 md:text-xl md:shadow-[3px_3px_0px_#1A1A1A]"
+                aria-hidden
+              >
+                ◆
               </div>
               <h1 className="truncate text-2xl font-bold tracking-tighter md:text-3xl">Alveo.</h1>
             </div>
@@ -301,7 +302,9 @@ export default function AppShell() {
             </div>
             <button
               type="button"
-              className="shrink-0 rounded-lg border-2 border-[#1A1A1A] bg-white p-2 shadow-[2px_2px_0px_#1A1A1A] md:p-2.5"
+              className={`shrink-0 rounded-lg border-2 border-[#1A1A1A] bg-white p-2 shadow-[2px_2px_0px_#1A1A1A] transition-opacity md:p-2.5 ${
+                menuOpen ? 'pointer-events-none invisible' : ''
+              }`}
               onClick={() => setMenuOpen(true)}
               aria-expanded={menuOpen}
               aria-controls="app-nav-drawer"

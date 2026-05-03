@@ -44,8 +44,8 @@ function tabBtn(active: boolean, children: ReactNode, onClick: () => void) {
       onClick={onClick}
       className={
         active ?
-          'rounded-xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-4 py-2 text-sm font-bold text-white shadow-[2px_2px_0px_#ffffff]'
-        : 'rounded-xl border-2 border-[#1A1A1A]/30 bg-white px-4 py-2 text-sm font-semibold text-[#374550] transition hover:border-[#1A1A1A]/50'
+          'w-full min-w-0 justify-center rounded-lg border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-1.5 py-2 text-center text-[11px] font-bold leading-snug text-white shadow-[2px_2px_0px_#ffffff] sm:rounded-xl sm:px-3 sm:text-sm'
+        : 'w-full min-w-0 justify-center rounded-lg border-2 border-[#1A1A1A]/30 bg-white px-1.5 py-2 text-center text-[11px] font-semibold leading-snug text-[#374550] transition hover:border-[#1A1A1A]/50 sm:rounded-xl sm:px-3 sm:text-sm'
       }
     >
       {children}
@@ -523,12 +523,12 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   }
 
   return (
-    <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-8 pb-10">
-      <header className="rounded-3xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-[#faf8f5] to-[#fef6d8] p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-8">
+    <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-[max(3rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] sm:gap-6 md:gap-8 md:pb-10">
+      <header className="rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-[#faf8f5] to-[#fef6d8] p-4 shadow-[5px_5px_0px_#1A1A1A] sm:rounded-3xl sm:p-6 md:p-8">
         <p className="mb-2 inline-flex rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
           Community
         </p>
-        <h1 className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tracking-tight text-[#162327] md:text-3xl">
+        <h1 className="font-['Space_Grotesk',sans-serif] text-xl font-bold tracking-tight text-[#162327] sm:text-2xl md:text-3xl">
           Tra simili ci capisce, fatti sentire!
         </h1>
         <p className="mt-3 max-w-xl text-[15px] font-medium leading-relaxed text-[#374550]">
@@ -541,7 +541,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid w-full min-w-0 grid-cols-3 gap-1.5 sm:gap-2" role="tablist" aria-label="Sezioni community">
         {tabBtn(tab === 'chat', 'Chat globale', () => setTab('chat'))}
         {tabBtn(tab === 'friends', 'Amici e messaggi', () => setTab('friends'))}
         {tabBtn(tab === 'profile', 'Il tuo profilo', () => setTab('profile'))}
@@ -549,10 +549,13 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
 
       {tab === 'chat' ?
         <section
-          className="flex min-h-[22rem] flex-col rounded-3xl border-[3px] border-[#1A1A1A] bg-white shadow-[5px_5px_0px_#1A1A1A]"
+          className="flex min-h-[min(22rem,55dvh)] min-w-0 flex-col overflow-hidden rounded-2xl border-[3px] border-[#1A1A1A] bg-white shadow-[5px_5px_0px_#1A1A1A] sm:min-h-[22rem] sm:rounded-3xl"
           aria-label="Chat globale"
         >
-          <div ref={globalListRef} className="max-h-[min(52vh,28rem)] flex-1 space-y-3 overflow-y-auto p-4">
+          <div
+            ref={globalListRef}
+            className="min-h-0 min-w-0 max-h-[min(48dvh,26rem)] flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 pe-4 sm:max-h-[min(52vh,28rem)] sm:px-4 sm:py-4 sm:pe-5"
+          >
             {globalMessages.length > 0 && globalHasMore ?
               <div className="flex justify-center pb-1">
                 <button
@@ -584,7 +587,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                   className={`flex w-full flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'}`}
                 >
                   <p
-                    className={`max-w-[85%] px-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#5c6b72] ${
+                    className={`max-w-[min(85%,calc(100%-0.5rem))] px-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#5c6b72] ${
                       mine ? 'text-right' : 'text-left'
                     }`}
                   >
@@ -593,8 +596,8 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                   <div
                     className={
                       mine ?
-                        'max-w-[85%] rounded-2xl border-2 border-[#1A1A1A] bg-[#1A1A1A] px-3 py-2 text-[14px] text-white'
-                      : 'max-w-[85%] rounded-2xl border-2 border-[#1A1A1A]/25 bg-[#f4f0ea] px-3 py-2 text-[14px] text-[#1A1A1A]'
+                        'max-w-[min(85%,calc(100%-0.5rem))] rounded-2xl border-2 border-[#1A1A1A] bg-[#1A1A1A] px-3 py-2 text-[14px] text-white'
+                      : 'max-w-[min(85%,calc(100%-0.5rem))] rounded-2xl border-2 border-[#1A1A1A]/25 bg-[#f4f0ea] px-3 py-2 text-[14px] text-[#1A1A1A]'
                     }
                   >
                     <p className="whitespace-pre-wrap break-words">{m.body}</p>
@@ -611,7 +614,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
               )
             })}
           </div>
-          <div className="border-t-2 border-[#1A1A1A]/12 p-3">
+          <div className="shrink-0 border-t-2 border-[#1A1A1A]/12 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <textarea
                 value={draftGlobal}

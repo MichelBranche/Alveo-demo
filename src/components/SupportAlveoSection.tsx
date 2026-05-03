@@ -1,12 +1,16 @@
 import supportHeartImg from '../assets/support-alveo-heart.png'
 
+/** Link predefinito donazioni / contributo (Revolut.Me); sovrascrivibile con `VITE_ALVEO_SUPPORT_URL`. */
+const DEFAULT_SUPPORT_CHECKOUT_URL = 'https://revolut.me/michelodxl'
+
 /**
  * Sezione home: sostegno ricorrente (es. 1 €/mese) e benefici in anteprima.
- * Opzionale: `VITE_ALVEO_SUPPORT_URL` → link esterno (Stripe, Ko-fi, Patreon, ecc.).
+ * `VITE_ALVEO_SUPPORT_URL` → override (Stripe, altro); altrimenti si usa il link Revolut predefinito.
  */
 
 export default function SupportAlveoSection() {
-  const checkoutUrl = import.meta.env.VITE_ALVEO_SUPPORT_URL?.trim()
+  const checkoutUrl =
+    import.meta.env.VITE_ALVEO_SUPPORT_URL?.trim() || DEFAULT_SUPPORT_CHECKOUT_URL
 
   return (
     <section
@@ -74,21 +78,17 @@ export default function SupportAlveoSection() {
             </li>
           </ul>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            {checkoutUrl ?
-              <a
-                href={checkoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-8 py-4 text-center font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#ffffff] transition hover:bg-[#2a383f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#ffffff]"
-              >
-                Attiva il sostegno (1 € / mese)
-              </a>
-            : <p className="text-[15px] font-medium text-[#374550]">
-                A breve: da qui il link per attivare l&apos;abbonamento.
-              </p>}
+            <a
+              href={checkoutUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-8 py-4 text-center font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#ffffff] transition hover:bg-[#2a383f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#ffffff]"
+            >
+              Dona o attiva il sostegno (Revolut)
+            </a>
             <p className="max-w-md text-xs leading-relaxed text-[#5c6b72] sm:ml-1">
-              Il pagamento sarà gestito da un fornitore esterno sicuro (es. Stripe); Alveo non conserva i dati della
-              carta.
+              Il pagamento avviene su Revolut (revolut.me), in pagina sicura; Alveo non riceve né conserva i dati della
+              tua carta.
             </p>
           </div>
         </div>
