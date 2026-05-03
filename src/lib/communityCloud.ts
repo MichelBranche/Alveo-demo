@@ -151,12 +151,16 @@ export async function sendGlobalMessage(sb: SupabaseClient, userId: string, body
   return data as GlobalMessageRow
 }
 
+/**
+ * `channelKey` univoco per sessione (es. user id) evita collisioni tra tab/client sulla stessa connessione Supabase.
+ */
 export function subscribeGlobalMessages(
   sb: SupabaseClient,
   onInsert: (row: GlobalMessageRow) => void,
+  channelKey: string,
 ): RealtimeChannel {
   const ch = sb
-    .channel('community-global-messages')
+    .channel(`community-global:${channelKey}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'community_global_messages' },

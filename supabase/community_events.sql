@@ -1,5 +1,6 @@
--- Eventi community in calendario (lettura anche senza login per la home; creazione solo utenti autenticati).
--- Esegui nel SQL Editor dopo supabase/community.sql.
+-- Eventi community in calendario (tabella public.community_events).
+-- NON crea la chat: public.community_global_messages sta in supabase/community.sql — esegui anche quello nello stesso progetto Supabase dell’app.
+-- Esegui questo file dopo community.sql (stesso database).
 
 create table if not exists public.community_events (
   id uuid primary key default gen_random_uuid(),

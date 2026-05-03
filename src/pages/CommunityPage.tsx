@@ -93,6 +93,10 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const rtGlobalRef = useRef<RealtimeChannel | null>(null)
   const rtDmRef = useRef<RealtimeChannel | null>(null)
   const hbTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const globalMessagesRef = useRef<GlobalMessageRow[]>([])
+  const wireGlobalRtRef = useRef<() => void>(() => {})
+  const prevCommunityTabRef = useRef<'chat' | 'friends' | 'profile'>(tab)
+  globalMessagesRef.current = globalMessages
 
   const refreshProfilesForMessages = useCallback(
     async (rows: GlobalMessageRow[]) => {
@@ -159,26 +163,98 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     setProfileMap((prev) => new Map(prev).set(p.user_id, p))
   }, [])
 
+  /** Allinea messaggi persi (tab in background / WebSocket in pausa su desktop) senza perdere lo storico “carica precedenti”. */
+  const mergeGlobalCatchUp = useCallback(async () => {
+    if (!sb) return
+    try {
+      const rows = await fetchGlobalMessages(sb)
+      const prev = globalMessagesRef.current
+      const prevIds = new Set(prev.map((m) => m.id))
+      let anyNew = false
+      for (const r of rows) {
+        if (!prevIds.has(r.id)) anyNew = true
+      }
+      const byId = new Map(prev.map((m) => [m.id, m]))
+      for (const r of rows) byId.set(r.id, r)
+      const next = [...byId.values()].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      )
+      setGlobalMessages(next)
+      if (anyNew) scrollGlobalBottomRef.current = true
+      try {
+        await refreshProfilesForMessages(rows)
+      } catch {
+        /* */
+      }
+    } catch {
+      /* */
+    }
+  }, [sb, refreshProfilesForMessages])
+
+  const wireGlobalRealtime = useCallback(() => {
+    if (!sb || !uid) return
+    rtGlobalRef.current?.unsubscribe()
+    rtGlobalRef.current = subscribeGlobalMessages(
+      sb,
+      (row) => {
+        scrollGlobalBottomRef.current = true
+        setGlobalMessages((p) => (p.some((x) => x.id === row.id) ? p : [...p, row]))
+        void fetchCommunityProfiles(sb, [row.user_id]).then((m) => {
+          const pr = m.get(row.user_id)
+          if (pr) mergeProfile(pr)
+        })
+      },
+      uid,
+    )
+  }, [sb, uid, mergeProfile])
+
+  wireGlobalRtRef.current = wireGlobalRealtime
+
   useEffect(() => {
     if (!sb || !uid || !canUseDiary) return
     void loadGlobal()
-    rtGlobalRef.current?.unsubscribe()
-    rtGlobalRef.current = subscribeGlobalMessages(sb, (row) => {
-      scrollGlobalBottomRef.current = true
-      setGlobalMessages((prev) => {
-        if (prev.some((x) => x.id === row.id)) return prev
-        return [...prev, row]
-      })
-      void fetchCommunityProfiles(sb, [row.user_id]).then((m) => {
-        const p = m.get(row.user_id)
-        if (p) mergeProfile(p)
-      })
-    })
+  }, [sb, uid, canUseDiary, loadGlobal])
+
+  useEffect(() => {
+    if (!sb || !uid || !canUseDiary) return
+    wireGlobalRealtime()
     return () => {
       rtGlobalRef.current?.unsubscribe()
       rtGlobalRef.current = null
     }
-  }, [sb, uid, canUseDiary, loadGlobal, mergeProfile])
+  }, [sb, uid, canUseDiary, wireGlobalRealtime])
+
+  useEffect(() => {
+    if (!sb || !uid || !canUseDiary) return
+    let t: ReturnType<typeof setTimeout> | null = null
+    const scheduleHeal = () => {
+      if (t) clearTimeout(t)
+      t = window.setTimeout(() => {
+        t = null
+        if (tab === 'chat') void mergeGlobalCatchUp()
+        wireGlobalRtRef.current()
+      }, 320)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return
+      scheduleHeal()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('online', scheduleHeal)
+    return () => {
+      if (t) clearTimeout(t)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('online', scheduleHeal)
+    }
+  }, [sb, uid, canUseDiary, tab, mergeGlobalCatchUp])
+
+  useEffect(() => {
+    const from = prevCommunityTabRef.current
+    prevCommunityTabRef.current = tab
+    if (tab !== 'chat' || !sb || !uid || !canUseDiary) return
+    if (from === 'chat') return
+    void mergeGlobalCatchUp()
+  }, [tab, sb, uid, canUseDiary, mergeGlobalCatchUp])
 
   useLayoutEffect(() => {
     const el = globalListRef.current
@@ -497,10 +573,23 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
             : null}
             {globalMessages.map((m) => {
               const p = profileMap.get(m.user_id)
-              const label = p?.display_name ?? (m.user_id === uid ? 'Tu' : 'Utente')
               const mine = m.user_id === uid
+              const senderLabel =
+                mine ?
+                  (myProfile?.display_name ?? p?.display_name ?? 'Tu')
+                : (p?.display_name ?? 'Utente')
               return (
-                <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  key={m.id}
+                  className={`flex w-full flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'}`}
+                >
+                  <p
+                    className={`max-w-[85%] px-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#5c6b72] ${
+                      mine ? 'text-right' : 'text-left'
+                    }`}
+                  >
+                    {senderLabel}
+                  </p>
                   <div
                     className={
                       mine ?
@@ -508,11 +597,6 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                       : 'max-w-[85%] rounded-2xl border-2 border-[#1A1A1A]/25 bg-[#f4f0ea] px-3 py-2 text-[14px] text-[#1A1A1A]'
                     }
                   >
-                    {!mine ?
-                      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#5c6b72]">
-                        {label}
-                      </p>
-                    : null}
                     <p className="whitespace-pre-wrap break-words">{m.body}</p>
                     <p className={`mt-1 text-[10px] ${mine ? 'text-white/70' : 'text-gray-500'}`}>
                       {new Date(m.created_at).toLocaleString('it-IT', {
