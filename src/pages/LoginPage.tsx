@@ -1,6 +1,6 @@
 import { type FormEvent, useCallback, useId, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GoogleSignInButton } from '../components/GoogleSignInButton'
+import { OAuthSignInStack } from '../components/OAuthSignInButtons'
 import { CurtainLink } from '../components/NavigationTransition'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
 import { signInDiaryCloud } from '../lib/diaryCloud'
@@ -98,7 +98,7 @@ export default function LoginPage() {
             Entra nell&apos;app
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-gray-700">
-            Puoi collegarti con Google oppure con email e password già registrate. Le credenziali vanno al servizio di
+            Puoi collegarti con Google, Discord oppure con email e password già registrate. Le credenziali vanno al servizio di
             autenticazione su canale HTTPS, non sono memorizzate in questo schermo.
           </p>
 
@@ -121,7 +121,7 @@ export default function LoginPage() {
 
           {cloudEnabled && supabase ? (
             <div className="mt-6">
-              <GoogleSignInButton
+              <OAuthSignInStack
                 supabase={supabase}
                 disabled={!cloudEnabled || submitting}
                 variant="signin"

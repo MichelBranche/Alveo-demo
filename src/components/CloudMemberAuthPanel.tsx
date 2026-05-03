@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useId, useState } from 'react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { useNavigate } from 'react-router-dom'
-import { GoogleSignInButton } from './GoogleSignInButton'
+import { OAuthSignInStack } from './OAuthSignInButtons'
 import {
   signInDiaryCloud,
   signOutDiaryCloud,
@@ -105,7 +105,7 @@ export function CloudMemberAuthPanel({
       ) : (
         <>
           <div className="mt-4">
-            <GoogleSignInButton
+            <OAuthSignInStack
               supabase={sb}
               variant="signin"
               onError={(m) => onToast(m)}

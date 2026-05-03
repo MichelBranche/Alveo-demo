@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useId, useMemo, useRef, useState } from 'react'
-import { GoogleSignInButton } from '../components/GoogleSignInButton'
+import { OAuthSignInStack } from '../components/OAuthSignInButtons'
 import { CurtainLink } from '../components/NavigationTransition'
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
@@ -153,7 +153,7 @@ export default function RegisterPage() {
             Registrazione
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-gray-700">
-            Puoi usare Google oppure email e password. Le password e i dati sensibili non restano in questo schermo:
+            Puoi usare Google, Discord oppure email e password. Le password e i dati sensibili non restano in questo schermo:
             vanno al servizio di autenticazione su canale HTTPS. Non usare password riutilizzate da altri servizi.
           </p>
         </div>
@@ -206,7 +206,7 @@ export default function RegisterPage() {
                     {oauthError}
                   </p>
                 ) : null}
-                <GoogleSignInButton
+                <OAuthSignInStack
                   supabase={supabase}
                   disabled={submitting}
                   variant="signup"

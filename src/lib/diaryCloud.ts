@@ -167,11 +167,19 @@ export function authAppRedirectUrl(): string | undefined {
   }
 }
 
-/** Avvia Sign in with Google (redirect browser verso Google e poi all’app). */
-export async function signInWithGoogleOAuth(sb: SupabaseClient): Promise<void> {
+/** Provider OAuth gestiti dall’UI (abilitarli anche in Supabase → Authentication → Providers). */
+export type DiaryOAuthProvider = 'google' | 'discord'
+
+const oauthProviderLabelIt: Record<DiaryOAuthProvider, string> = {
+  google: 'Google',
+  discord: 'Discord',
+}
+
+/** Avvia OAuth browser (Google, Discord…) e redirect verso Supabase poi all’app. */
+export async function signInWithDiaryOAuth(sb: SupabaseClient, provider: DiaryOAuthProvider): Promise<void> {
   const redirectTo = authAppRedirectUrl()
   const { data, error } = await sb.auth.signInWithOAuth({
-    provider: 'google',
+    provider,
     options: redirectTo ? { redirectTo } : {},
   })
   if (error) throw error
@@ -180,7 +188,7 @@ export async function signInWithGoogleOAuth(sb: SupabaseClient): Promise<void> {
     window.location.assign(url)
     return
   }
-  throw new Error('Accesso con Google non avviato: URL mancante.')
+  throw new Error(`Accesso con ${oauthProviderLabelIt[provider]} non avviato: URL mancante.`)
 }
 
 export async function signUpDiaryCloud(
