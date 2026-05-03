@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CloudMemberAuthPanel } from '../components/CloudMemberAuthPanel'
 import { AUDIOBOOK_CATALOG } from '../content/audiobooks'
+import {
+  LAST_PLAYBACK_CHANGED,
+  loadAudiobookLastPlayback,
+  type AudiobookLastPlaybackState,
+} from '../lib/audiobookLastPlayback'
 import { stashAudiobookOpenIntent } from '../lib/audiobookOpenIntent'
 import {
   loadSavedAudiobookChapters,
@@ -75,6 +80,13 @@ const ACT_INTENTIONS = [
 const QUICK_CARD =
   'flex min-h-[92px] flex-1 basis-[clamp(140px,38%,1fr)] flex-col justify-between rounded-2xl border-[3px] border-[#1A1A1A] bg-white p-4 text-left shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_#1A1A1A]'
 
+function formatPlaybackMmSs(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return '—'
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: NavId) => void }) {
   const {
     cloudEnabled,
@@ -88,9 +100,8 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
   const [selectedMood, setSelectedMood] = useState<OasisMood | null>(null)
   const [actIntentIndex, setActIntentIndex] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
-  const [savedListening, setSavedListening] = useState<SavedAudiobookChapter[]>(() =>
-    loadSavedAudiobookChapters(),
-  )
+  const [savedListening, setSavedListening] = useState<SavedAudiobookChapter[]>([])
+  const [lastPlayback, setLastPlayback] = useState<AudiobookLastPlaybackState | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const showToast = useCallback((msg: string) => {
@@ -116,10 +127,25 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
   }, [canUseOasis])
 
   useEffect(() => {
-    if (!canUseOasis) return
+    if (!canUseOasis) {
+      setSavedListening([])
+      return
+    }
+    setSavedListening(loadSavedAudiobookChapters())
     const fn = () => setSavedListening(loadSavedAudiobookChapters())
     window.addEventListener(SAVED_CHAPTERS_CHANGED, fn)
     return () => window.removeEventListener(SAVED_CHAPTERS_CHANGED, fn)
+  }, [canUseOasis])
+
+  useEffect(() => {
+    if (!canUseOasis) {
+      setLastPlayback(null)
+      return
+    }
+    setLastPlayback(loadAudiobookLastPlayback())
+    const fn = () => setLastPlayback(loadAudiobookLastPlayback())
+    window.addEventListener(LAST_PLAYBACK_CHANGED, fn)
+    return () => window.removeEventListener(LAST_PLAYBACK_CHANGED, fn)
   }, [canUseOasis])
 
   const toggleMood = useCallback((mood: OasisMood) => {
@@ -138,6 +164,11 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
   const actIntent = ACT_INTENTIONS[actIntentIndex]
 
   const spotlightAudiobook = useMemo(() => AUDIOBOOK_CATALOG[0] ?? null, [])
+
+  const lastPlaybackKnown = useMemo(() => {
+    if (!lastPlayback) return false
+    return AUDIOBOOK_CATALOG.some((x) => x.id === lastPlayback.audiobookId)
+  }, [lastPlayback])
 
   const todayLabel = useMemo(() => {
     try {
@@ -315,12 +346,40 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
             <div className="mb-5 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <span className="mb-3 inline-block rounded-md border-2 border-black bg-white px-2 py-1 text-xs font-bold uppercase tracking-wider shadow-[1px_1px_0px_#1A1A1A]">
-                  Dal catalogo audiolibri
+                  {lastPlaybackKnown ?
+                    'Continua audiolibro'
+                  : 'Dal catalogo audiolibri'}
                 </span>
                 <h2 id="oasis-audiobooks-spot-heading" className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">
-                  {spotlightAudiobook ? spotlightAudiobook.title : 'Strumenti e audiolibri'}
+                  {lastPlaybackKnown ?
+                    lastPlayback?.audiobookTitle
+                  : spotlightAudiobook ?
+                    spotlightAudiobook.title
+                  : 'Strumenti e audiolibri'}
                 </h2>
-                {spotlightAudiobook ?
+                {lastPlaybackKnown && lastPlayback ?
+                  <>
+                    <p className="mt-1 text-sm font-semibold text-gray-800">{lastPlayback.author}</p>
+                    <p className="mt-3 max-w-prose font-['Space_Grotesk',sans-serif] text-[15px] font-semibold leading-snug text-[#162327]">
+                      {lastPlayback.chapterTitle}
+                    </p>
+                    <p className="mt-2 text-[13px] font-medium tabular-nums text-gray-800">
+                      {formatPlaybackMmSs(lastPlayback.positionSec)}
+                      {lastPlayback.durationSec && lastPlayback.durationSec > 0 ?
+                        <>
+                          {' '}
+                          <span aria-hidden>/</span> {formatPlaybackMmSs(lastPlayback.durationSec)}
+                        </>
+                      : null}
+                      {' · '}
+                      Cap. {lastPlayback.chapterIndex + 1}
+                    </p>
+                    <p className="mt-2 max-w-prose text-[13px] leading-relaxed text-gray-800">
+                      Il punto nell&apos;ascolto è salvato sul dispositivo; tocca Riprendi per aprire il lettore nello stesso
+                      momento — anche da un&apos;altra pagina nell&apos;app.
+                    </p>
+                  </>
+                : spotlightAudiobook ?
                   <>
                     <p className="mt-1 text-sm font-semibold text-gray-800">{spotlightAudiobook.author}</p>
                     <p className="mt-3 max-w-prose text-[15px] leading-relaxed text-gray-800">{spotlightAudiobook.synopsis}</p>
@@ -333,13 +392,36 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
                 )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => onSelectNav('tools')}
-              className="w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-3.5 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[3px_3px_0px_#ffffff] transition hover:bg-[#2a383f] sm:w-auto sm:min-w-[14rem] sm:px-8"
-            >
-              Apri strumenti e catalogo completo
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              {lastPlaybackKnown && lastPlayback ?
+                <button
+                  type="button"
+                  onClick={() => {
+                    stashAudiobookOpenIntent({
+                      audiobookId: lastPlayback.audiobookId,
+                      chapterIndex: lastPlayback.chapterIndex,
+                      resumePositionSec: lastPlayback.positionSec,
+                    })
+                    onSelectNav('tools')
+                    showToast("Riprendiamo dall'ultimo punto di ascolto…")
+                  }}
+                  className="w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#1ed760] py-3.5 font-['Space_Grotesk',sans-serif] text-base font-bold text-[#0a0a0a] shadow-[3px_3px_0px_#ffffff] transition hover:brightness-105 sm:w-auto sm:min-w-[13rem] sm:px-8"
+                >
+                  Riprendi ascolto
+                </button>
+              : null}
+              <button
+                type="button"
+                onClick={() => onSelectNav('tools')}
+                className={`w-full rounded-xl border-[3px] border-[#1A1A1A] py-3.5 font-['Space_Grotesk',sans-serif] text-base font-bold shadow-[3px_3px_0px_#ffffff] transition sm:w-auto sm:min-w-[14rem] sm:px-8 ${
+                  lastPlaybackKnown ?
+                    'bg-white text-[#1A1A1A] hover:bg-[#fafafa]'
+                  : 'bg-[#1A1A1A] text-white hover:bg-[#2a383f]'
+                }`}
+              >
+                Apri strumenti e catalogo completo
+              </button>
+            </div>
           </section>
 
           <section

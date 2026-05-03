@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { DEV_BYPASS_AUTH_GATES } from '../devAuthBypass'
+import { clearAudiobookLastPlayback } from '../lib/audiobookLastPlayback'
+import { clearSavedAudiobookChapters } from '../lib/savedAudiobookChapters'
 import { getDiarySupabase } from '../lib/diaryCloud'
 
 export type DiaryAuthState = {
@@ -52,8 +54,12 @@ export function DiaryAuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_evt, next) => {
+    } = supabase.auth.onAuthStateChange((evt, next) => {
       setSession(next)
+      if (!DEV_BYPASS_AUTH_GATES && evt === 'SIGNED_OUT') {
+        clearAudiobookLastPlayback()
+        clearSavedAudiobookChapters()
+      }
     })
 
     return () => {

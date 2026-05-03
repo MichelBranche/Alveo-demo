@@ -418,8 +418,10 @@ ul.landing-account-benefits li:nth-child(3) .sparkle-diamond {
   border-radius: 9999px;
   outline: none;
   background: rgba(255, 255, 255, 0.2);
-  width: 4.25rem;
-  max-width: 22vw;
+  /* Larghezza fissa minima: evita che il dock mobile schiacci il pollice sul volume */
+  width: clamp(3rem, 18vw, 4.25rem);
+  min-width: 3rem;
+  max-width: 4.25rem;
 }
 
 .slider-audiobook-volume::-webkit-slider-runnable-track {

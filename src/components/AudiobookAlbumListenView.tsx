@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { AudiobookItem } from '../content/audiobooks'
 import { audiobookPlaylistUrl, parseM3uPlaylist, type M3uTrack } from '../lib/parseM3u'
+import { saveAudiobookLastPlayback } from '../lib/audiobookLastPlayback'
 import {
   isAudiobookChapterSaved,
   SAVED_CHAPTERS_CHANGED,
@@ -112,25 +113,52 @@ function formatHoursMinutes(totalSec: number): string {
 
 const AUDIOBOOK_VOLUME_LS = 'alveo:audiobookVolume:v1'
 
+/** Senza login si possono riprodurre solo i primi N capitoli (indici 0..N-1). */
+const GUEST_PREVIEW_CHAPTER_COUNT = 3
+
 type Props = {
   item: AudiobookItem
   onBack: () => void
+  /** Utente con Area personale: catalogo capitoli completo. */
+  fullPlaybackUnlocked?: boolean
+  /** Solo per utenti con Area personale: salva capitolo e tempo sul dispositivo. */
+  persistAudiobookLastPlayback?: boolean
   pendingChapterIndex?: number
   onPendingChapterApplied?: () => void
+  pendingResumePositionSec?: number
+  onPendingResumeApplied?: () => void
+  /** Apre l’Area personale (login / registrazione) dopo il limite anteprima. */
+  onOpenPersonalArea?: () => void
+  /** Solo utenti con Area personale: salva capitoli (cuore). */
+  allowChapterSaves?: boolean
 }
 
 export function AudiobookAlbumListenView({
   item,
   onBack,
+  fullPlaybackUnlocked = true,
+  persistAudiobookLastPlayback = false,
   pendingChapterIndex,
   onPendingChapterApplied,
+  pendingResumePositionSec,
+  onPendingResumeApplied,
+  onOpenPersonalArea,
+  allowChapterSaves = false,
 }: Props) {
   const audioLabelId = useId()
   const audioRef = useRef<HTMLAudioElement>(null)
+  const itemRef = useRef(item)
+  itemRef.current = item
   const playAfterLoadRef = useRef(false)
   const seekingRef = useRef(false)
   const tracksRef = useRef<M3uTrack[] | null>(null)
   const activeIdxRef = useRef(0)
+  const pendingResumeBundleRef = useRef<{ chapterIdx: number; sec: number } | null>(null)
+  /** Ultimo punto noto sulla traccia: alla navigazione SPA React azzera `audioRef` prima del cleanup degli effect. */
+  const lastPlaybackProbeRef = useRef<{ positionSec: number; durationSec: number | null }>({
+    positionSec: 0,
+    durationSec: null,
+  })
 
   const [tracks, setTracks] = useState<M3uTrack[] | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -146,8 +174,20 @@ export function AudiobookAlbumListenView({
   const [likedCurrent, setLikedCurrent] = useState(false)
   const [savedUiTick, setSavedUiTick] = useState(0)
   const [dockAnimIn, setDockAnimIn] = useState(false)
+  const [guestLimitWallOpen, setGuestLimitWallOpen] = useState(false)
+  const [guestWallDragPx, setGuestWallDragPx] = useState(0)
+  const guestWallPanelRef = useRef<HTMLDivElement>(null)
+  const guestWallDragRef = useRef({ active: false, startY: 0, maxDy: 0 })
+
+  const closeGuestLimitWall = useCallback(() => {
+    setGuestWallDragPx(0)
+    setGuestLimitWallOpen(false)
+  }, [])
 
   const pendingChapterConsumedRef = useRef(false)
+  /** Max indice capitolo incluso navigabile nella modalità ospite (= GUEST_PREVIEW_CHAPTER_COUNT - 1). */
+  const guestChapterMaxInclusive = fullPlaybackUnlocked ? Number.POSITIVE_INFINITY : GUEST_PREVIEW_CHAPTER_COUNT - 1
+  const isGuestPreview = !fullPlaybackUnlocked
 
   const audio = item.audio
 
@@ -165,30 +205,59 @@ export function AudiobookAlbumListenView({
 
   useEffect(() => {
     pendingChapterConsumedRef.current = false
+    pendingResumeBundleRef.current = null
     setActiveIndex(0)
   }, [item.id])
+
+  /** Ripresa da punto salvato insieme a pendingChapterIndex (es. dall’Area personale). */
+  useEffect(() => {
+    if (
+      pendingChapterIndex != null &&
+      pendingResumePositionSec != null &&
+      Number.isFinite(pendingResumePositionSec)
+    ) {
+      const raw = Math.max(0, Math.floor(pendingChapterIndex))
+      const chapterIdx =
+        fullPlaybackUnlocked ?
+          raw
+        : Math.min(raw, Math.max(0, GUEST_PREVIEW_CHAPTER_COUNT - 1))
+      pendingResumeBundleRef.current = {
+        chapterIdx,
+        sec: pendingResumePositionSec,
+      }
+    }
+  }, [item.id, pendingChapterIndex, pendingResumePositionSec, fullPlaybackUnlocked])
 
   useEffect(() => {
     if (!tracks?.length || pendingChapterConsumedRef.current) return
     if (pendingChapterIndex == null || Number.isNaN(pendingChapterIndex)) return
-    const idx = Math.max(0, Math.min(tracks.length - 1, Math.floor(pendingChapterIndex)))
+    const raw = Math.max(0, Math.min(tracks.length - 1, Math.floor(pendingChapterIndex)))
+    const idx =
+      fullPlaybackUnlocked ? raw : Math.min(raw, Math.max(0, GUEST_PREVIEW_CHAPTER_COUNT - 1))
     pendingChapterConsumedRef.current = true
     setActiveIndex(idx)
     queueMicrotask(() => onPendingChapterApplied?.())
-  }, [tracks, pendingChapterIndex, onPendingChapterApplied])
+  }, [tracks, pendingChapterIndex, onPendingChapterApplied, fullPlaybackUnlocked])
+
+  /** Se si passa da membro a ospite mentre un capitolo alto è selezionato, rientra nell’anteprima. */
+  useEffect(() => {
+    if (fullPlaybackUnlocked || !tracks?.length) return
+    const cap = Math.max(0, GUEST_PREVIEW_CHAPTER_COUNT - 1)
+    setActiveIndex((i) => (i > cap ? cap : i))
+  }, [fullPlaybackUnlocked, tracks?.length, item.id])
 
   useEffect(() => {
-    setLikedCurrent(isAudiobookChapterSaved(item.id, activeIndex))
-  }, [item.id, activeIndex])
+    setLikedCurrent(allowChapterSaves && isAudiobookChapterSaved(item.id, activeIndex))
+  }, [item.id, activeIndex, allowChapterSaves])
 
   useEffect(() => {
     const sync = () => {
-      setLikedCurrent(isAudiobookChapterSaved(item.id, activeIndex))
+      setLikedCurrent(allowChapterSaves && isAudiobookChapterSaved(item.id, activeIndex))
       setSavedUiTick((n) => n + 1)
     }
     window.addEventListener(SAVED_CHAPTERS_CHANGED, sync)
     return () => window.removeEventListener(SAVED_CHAPTERS_CHANGED, sync)
-  }, [item.id, activeIndex])
+  }, [item.id, activeIndex, allowChapterSaves])
 
   useEffect(() => {
     if (!audio) return
@@ -228,9 +297,51 @@ export function AudiobookAlbumListenView({
   const currentSrc = tracks?.[activeIndex]?.fileUrl
   const currentTitle = tracks?.[activeIndex]?.title
   const canPrevChapter = activeIndex > 0
-  const canNextChapter = !!(tracks && activeIndex < tracks.length - 1)
+  const canNextChapter = !!(
+    tracks &&
+    activeIndex < tracks.length - 1 &&
+    (fullPlaybackUnlocked || activeIndex < guestChapterMaxInclusive)
+  )
+
+  const persistPlaybackSnapshot = useCallback(() => {
+    if (!persistAudiobookLastPlayback) return
+    const it = itemRef.current
+    const list = tracksRef.current
+    const idx = activeIdxRef.current
+    const el = audioRef.current
+    if (!list?.length) return
+    const tr = list[idx]
+    if (!tr?.fileUrl) return
+    if (el && !seekingRef.current) {
+      const rawPos = el.currentTime
+      const rawDur = el.duration
+      if (Number.isFinite(rawPos) && rawPos >= 0) {
+        lastPlaybackProbeRef.current = {
+          positionSec: rawPos,
+          durationSec:
+            Number.isFinite(rawDur) && rawDur > 0 ?
+              rawDur
+            : lastPlaybackProbeRef.current.durationSec,
+        }
+      }
+    }
+    const pos = lastPlaybackProbeRef.current.positionSec
+    const dur = lastPlaybackProbeRef.current.durationSec
+    if (!Number.isFinite(pos) || pos < 0) return
+    saveAudiobookLastPlayback({
+      audiobookId: it.id,
+      audiobookTitle: it.title,
+      author: it.author,
+      chapterIndex: idx,
+      chapterTitle: tr.title ?? `Capitolo ${idx + 1}`,
+      positionSec: pos,
+      durationSec: dur,
+      coverSrc: it.coverSrc,
+    })
+  }, [persistAudiobookLastPlayback])
 
   useEffect(() => {
+    lastPlaybackProbeRef.current = { positionSec: 0, durationSec: null }
     setPositionSec(0)
     setDurationSec(0)
   }, [currentSrc])
@@ -247,6 +358,44 @@ export function AudiobookAlbumListenView({
   }, [currentSrc])
 
   useEffect(() => {
+    const b = pendingResumeBundleRef.current
+    if (!b || activeIndex !== b.chapterIdx || !currentSrc) return
+    const el = audioRef.current
+    if (!el) return
+    const captured = b
+    let finished = false
+
+    const seek = () => {
+      if (finished) return
+      if (pendingResumeBundleRef.current !== captured) return
+      const dur = el.duration
+      if (!Number.isFinite(dur) || dur <= 0) return
+      finished = true
+      let t = Math.max(0, captured.sec)
+      t = Math.min(t, Math.max(0, dur - 0.35))
+      el.currentTime = t
+      setPositionSec(t)
+      pendingResumeBundleRef.current = null
+      onPendingResumeApplied?.()
+      el.removeEventListener('loadedmetadata', seek)
+      el.removeEventListener('durationchange', seek)
+      // «Riprendi ascolto» dalla home/oasi: dopo lo seek parti in play (fallback silenzioso se il browser blocca l’autoplay).
+      playAfterLoadRef.current = false
+      void el.play().catch(() => {})
+    }
+
+    el.addEventListener('loadedmetadata', seek)
+    el.addEventListener('durationchange', seek)
+    if (el.readyState >= 1) seek()
+
+    return () => {
+      finished = true
+      el.removeEventListener('loadedmetadata', seek)
+      el.removeEventListener('durationchange', seek)
+    }
+  }, [currentSrc, activeIndex, onPendingResumeApplied])
+
+  useEffect(() => {
     const el = audioRef.current
     if (!el || !tracks?.length) return
 
@@ -254,27 +403,54 @@ export function AudiobookAlbumListenView({
       setPlaying(true)
       setDockSessionStarted(true)
     }
-    const onPause = () => setPlaying(false)
+    const onPause = () => {
+      setPlaying(false)
+      persistPlaybackSnapshot()
+    }
 
     const onTimeUpdate = () => {
       if (seekingRef.current) return
-      setPositionSec(el.currentTime)
-      if (Number.isFinite(el.duration) && el.duration > 0) setDurationSec(el.duration)
+      const p = el.currentTime
+      const d = el.duration
+      setPositionSec(p)
+      if (Number.isFinite(d) && d > 0) setDurationSec(d)
+      if (Number.isFinite(p) && p >= 0) {
+        lastPlaybackProbeRef.current = {
+          positionSec: p,
+          durationSec:
+            Number.isFinite(d) && d > 0 ? d : lastPlaybackProbeRef.current.durationSec,
+        }
+      }
     }
 
     const onLoadedMeta = () => {
-      setPositionSec(el.currentTime)
-      if (Number.isFinite(el.duration) && el.duration > 0) setDurationSec(el.duration)
+      const p = el.currentTime
+      const d = el.duration
+      setPositionSec(p)
+      if (Number.isFinite(d) && d > 0) setDurationSec(d)
+      if (Number.isFinite(p) && p >= 0) {
+        lastPlaybackProbeRef.current = {
+          positionSec: p,
+          durationSec:
+            Number.isFinite(d) && d > 0 ? d : lastPlaybackProbeRef.current.durationSec,
+        }
+      }
     }
 
     const onEnded = () => {
       setPlaying(false)
       const list = tracksRef.current
       const idx = activeIdxRef.current
-      if (list && idx + 1 < list.length) {
-        playAfterLoadRef.current = true
-        setActiveIndex(idx + 1)
+      const nextIdx = idx + 1
+      if (!list || nextIdx >= list.length) return
+      if (!fullPlaybackUnlocked && nextIdx >= GUEST_PREVIEW_CHAPTER_COUNT) {
+        playAfterLoadRef.current = false
+        if (list.length > GUEST_PREVIEW_CHAPTER_COUNT)
+          queueMicrotask(() => setGuestLimitWallOpen(true))
+        return
       }
+      playAfterLoadRef.current = true
+      setActiveIndex(nextIdx)
     }
 
     el.addEventListener('play', onPlay)
@@ -292,7 +468,99 @@ export function AudiobookAlbumListenView({
       el.removeEventListener('durationchange', onLoadedMeta)
       el.removeEventListener('ended', onEnded)
     }
-  }, [tracks])
+  }, [tracks, persistPlaybackSnapshot, fullPlaybackUnlocked])
+
+  useEffect(() => {
+    if (!guestLimitWallOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeGuestLimitWall()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [guestLimitWallOpen, closeGuestLimitWall])
+
+  useEffect(() => {
+    if (fullPlaybackUnlocked) closeGuestLimitWall()
+  }, [fullPlaybackUnlocked, closeGuestLimitWall])
+
+  /** Chiudi la scheda «Ti piace Alveo?» trascinando verso il basso (touch). */
+  useEffect(() => {
+    if (!guestLimitWallOpen) return
+    const el = guestWallPanelRef.current
+    if (!el) return
+
+    const dismissThreshold = () =>
+      typeof window !== 'undefined' ? Math.min(window.innerHeight * 0.16, 132) : 120
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      guestWallDragRef.current.active = el.scrollTop <= 2
+      guestWallDragRef.current.startY = e.touches[0].clientY
+      guestWallDragRef.current.maxDy = 0
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!guestWallDragRef.current.active || e.touches.length !== 1) return
+      const dy = e.touches[0].clientY - guestWallDragRef.current.startY
+      if (dy > 0) {
+        guestWallDragRef.current.maxDy = Math.max(guestWallDragRef.current.maxDy, dy)
+        e.preventDefault()
+        setGuestWallDragPx(dy)
+      } else {
+        setGuestWallDragPx(0)
+      }
+    }
+
+    const onTouchEnd = () => {
+      if (!guestWallDragRef.current.active) {
+        setGuestWallDragPx(0)
+        return
+      }
+      guestWallDragRef.current.active = false
+      const maxDy = guestWallDragRef.current.maxDy
+      setGuestWallDragPx(0)
+      if (maxDy > dismissThreshold()) closeGuestLimitWall()
+    }
+
+    const onTouchCancel = () => {
+      guestWallDragRef.current.active = false
+      setGuestWallDragPx(0)
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchCancel)
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchCancel)
+    }
+  }, [guestLimitWallOpen, closeGuestLimitWall])
+
+  useEffect(() => {
+    if (!playing || !tracks?.length) return
+    const id = window.setInterval(() => {
+      persistPlaybackSnapshot()
+    }, 4200)
+    return () => clearInterval(id)
+  }, [playing, tracks, persistPlaybackSnapshot])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') persistPlaybackSnapshot()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    const onPageHide = () => persistPlaybackSnapshot()
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [persistPlaybackSnapshot])
+
+  useEffect(() => () => persistPlaybackSnapshot(), [persistPlaybackSnapshot])
 
   /** Movimento fluido del thumb (come Spotify): timeupdate è troppo rado. */
   useEffect(() => {
@@ -306,7 +574,18 @@ export function AudiobookAlbumListenView({
       if (cancelled) return
       const el = audioRef.current
       if (!el || el.paused) return
-      if (!seekingRef.current) setPositionSec(el.currentTime)
+      if (!seekingRef.current) {
+        const p = el.currentTime
+        const d = el.duration
+        setPositionSec(p)
+        if (Number.isFinite(p) && p >= 0) {
+          lastPlaybackProbeRef.current = {
+            positionSec: p,
+            durationSec:
+              Number.isFinite(d) && d > 0 ? d : lastPlaybackProbeRef.current.durationSec,
+          }
+        }
+      }
       rafId = requestAnimationFrame(tick)
     }
 
@@ -324,6 +603,7 @@ export function AudiobookAlbumListenView({
 
   const selectTrack = useCallback(
     (idx: number) => {
+      if (idx < 0 || (!fullPlaybackUnlocked && idx >= GUEST_PREVIEW_CHAPTER_COUNT)) return
       setLauncherDismissed(true)
       if (idx === activeIndex) {
         playAfterLoadRef.current = false
@@ -333,7 +613,7 @@ export function AudiobookAlbumListenView({
       playAfterLoadRef.current = true
       setActiveIndex(idx)
     },
-    [activeIndex],
+    [activeIndex, fullPlaybackUnlocked],
   )
 
   const togglePlayPause = useCallback(() => {
@@ -435,7 +715,7 @@ export function AudiobookAlbumListenView({
   }, [])
 
   const toggleLikeCurrentChapter = useCallback(() => {
-    if (!tracks?.length) return
+    if (!allowChapterSaves || !tracks?.length) return
     const chapTitle = tracks[activeIndex]?.title ?? `Capitolo ${activeIndex + 1}`
     const nowLiked = toggleSavedAudiobookChapter({
       audiobookId: item.id,
@@ -446,11 +726,11 @@ export function AudiobookAlbumListenView({
       coverSrc: item.coverSrc,
     })
     setLikedCurrent(nowLiked)
-  }, [tracks, activeIndex, item])
+  }, [tracks, activeIndex, item, allowChapterSaves])
 
   const toggleLikeAtIndex = useCallback(
     (idx: number) => {
-      if (!tracks?.length) return
+      if (!allowChapterSaves || !tracks?.length) return
       const chapTitle = tracks[idx]?.title ?? `Capitolo ${idx + 1}`
       toggleSavedAudiobookChapter({
         audiobookId: item.id,
@@ -461,7 +741,7 @@ export function AudiobookAlbumListenView({
         coverSrc: item.coverSrc,
       })
     },
-    [tracks, item],
+    [tracks, item, allowChapterSaves],
   )
 
   return (
@@ -556,54 +836,83 @@ export function AudiobookAlbumListenView({
         : tracks && tracks.length > 0 ?
           <>
             <div className="bg-[#fdfcfa] px-3 pb-10 pt-4 sm:px-6 md:px-10">
-              <div className="mb-4 flex items-end justify-between border-b-[3px] border-[#1A1A1A] pb-3">
-                <h2 className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#162327] md:text-xl">
-                  Capitoli
-                </h2>
-                <span className="text-xs font-bold uppercase tracking-[0.12em] text-gray-500">Tocca una riga</span>
+              <div className="mb-4 flex flex-col gap-2 border-b-[3px] border-[#1A1A1A] pb-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#162327] md:text-xl">
+                    Capitoli
+                  </h2>
+                  {isGuestPreview ?
+                    <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#374550]">
+                      Anteprima gratuita <strong className="font-semibold text-[#1A1A1A]">primi tre capitoli</strong>.
+                      Accedi dall’Area personale (stesso account del diario) per ascoltare l’audiolibro completo.
+                    </p>
+                  : null}
+                </div>
+                <span className="shrink-0 text-xs font-bold uppercase tracking-[0.12em] text-gray-500">
+                  {isGuestPreview ?
+                    `${GUEST_PREVIEW_CHAPTER_COUNT} in anteprima`
+                  : 'Tocca una riga'}
+                </span>
               </div>
               <ul className="divide-y divide-[#1A1A1A]/12" role="list">
                 {tracks.map((t, idx) => {
                   void savedUiTick
                   const active = idx === activeIndex
+                  const locked = isGuestPreview && idx >= GUEST_PREVIEW_CHAPTER_COUNT
                   const rowLiked = isAudiobookChapterSaved(item.id, idx)
                   return (
                     <li key={`${idx}-${t.fileUrl}`} className="flex items-stretch">
                       <button
                         type="button"
-                        onClick={() => selectTrack(idx)}
+                        aria-disabled={locked ? true : undefined}
+                        onClick={() => {
+                          if (locked) {
+                            setGuestLimitWallOpen(true)
+                            return
+                          }
+                          selectTrack(idx)
+                        }}
                         className={`group grid min-h-[3rem] flex-1 grid-cols-[2.5rem_1fr_3.5rem] items-center gap-2 px-1 py-3 text-left sm:grid-cols-[3rem_1fr_4.5rem] sm:gap-4 sm:px-2 sm:py-3.5 ${
-                          active ? 'bg-[#d8cde6]' : 'hover:bg-white'
+                          locked ? 'cursor-pointer opacity-[0.72] hover:bg-black/[0.04]'
+                          : active ? 'bg-[#d8cde6]'
+                          : 'hover:bg-white'
                         } transition`}
                       >
                         <span
-                          className={`text-center font-mono text-[13px] tabular-nums sm:text-sm ${active ? 'font-bold text-[#1A1A1A]' : 'text-gray-500 group-hover:text-[#1A1A1A]'}`}
+                          className={`text-center font-mono text-[13px] tabular-nums sm:text-sm ${active ? 'font-bold text-[#1A1A1A]' : locked ? 'text-gray-400' : 'text-gray-500 group-hover:text-[#1A1A1A]'}`}
                         >
                           {idx + 1}
                         </span>
                         <span
-                          className={`min-w-0 text-[14px] leading-snug sm:text-[15px] ${active ? 'font-bold text-[#1A1A1A]' : 'font-medium text-[#162327]'}`}
+                          className={`flex min-w-0 flex-col gap-1 text-[14px] leading-snug sm:text-[15px] ${active ? 'font-bold text-[#1A1A1A]' : locked ? 'font-medium text-gray-500' : 'font-medium text-[#162327]'}`}
                         >
-                          {t.title}
+                          <span>{t.title}</span>
+                          {locked ?
+                            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-gray-400">
+                              Dopo login · sul cloud
+                            </span>
+                          : null}
                         </span>
                         <span className="text-right font-mono text-[12px] tabular-nums text-gray-600 sm:text-sm">
                           {formatMmSs(t.durationSec)}
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.preventDefault()
-                          toggleLikeAtIndex(idx)
-                        }}
-                        aria-label={
-                          rowLiked ? 'Togli dai salvati dell’area personale' : 'Salva nell’area personale nei preferiti'
-                        }
-                        aria-pressed={rowLiked}
-                        className="flex w-11 shrink-0 flex-col items-center justify-center border-l border-transparent text-[#162327]/50 transition hover:bg-[#fce7f3]/80 hover:text-[#c026d3] active:bg-[#fbcfe8]/90"
-                      >
-                        <HeartIcon filled={rowLiked} className="h-5 w-5" />
-                      </button>
+                      {allowChapterSaves ?
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.preventDefault()
+                            toggleLikeAtIndex(idx)
+                          }}
+                          aria-label={
+                            rowLiked ? 'Togli dai salvati dell’area personale' : 'Salva nell’area personale nei preferiti'
+                          }
+                          aria-pressed={rowLiked}
+                          className="flex w-11 shrink-0 flex-col items-center justify-center border-l border-transparent text-[#162327]/50 transition hover:bg-[#fce7f3]/80 hover:text-[#c026d3] active:bg-[#fbcfe8]/90"
+                        >
+                          <HeartIcon filled={rowLiked} className="h-5 w-5" />
+                        </button>
+                      : null}
                     </li>
                   )
                 })}
@@ -667,9 +976,10 @@ export function AudiobookAlbumListenView({
             )}
           </div>
 
-          <div className="relative flex min-h-[3.125rem] items-center">
-            <div className="z-[1] flex min-w-0 flex-1 items-center gap-2 overflow-hidden pl-[var(--dock-pad-x)] pr-2 sm:gap-2.5">
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-[6px] border border-white/[0.08] shadow-sm">
+          {/* 1fr | auto | 1fr: play sempre al centro del dock; testi lunghi a sinistra in scroll orizzontale. */}
+          <div className="grid min-h-[3.35rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1 px-[var(--dock-pad-x)] pb-1.5 pt-0.5 sm:min-h-[3.5rem] sm:gap-x-2 sm:pb-2 sm:pt-1">
+            <div className="flex min-w-0 items-center gap-1.5 self-center sm:gap-2">
+              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-[6px] border border-white/[0.08] shadow-sm sm:h-10 sm:w-10">
                 {item.coverSrc ?
                   <img
                     src={item.coverSrc}
@@ -691,85 +1001,89 @@ export function AudiobookAlbumListenView({
                   </div>
                 : null}
               </div>
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-semibold leading-snug text-white motion-reduce:transition-none">
-                  {currentTitle ?? `Capitolo ${activeIndex + 1}`}
-                </p>
-                <p className="truncate text-[11px] leading-snug text-white/[0.58]">
-                  {dockAwaitingPlayback ?
-                    <span className="inline-flex items-center gap-1.5 text-[#1ed760]/95">
-                      <DockSpinnerIcon className="h-3 w-3 shrink-0" />
-                      Connessione…
-                    </span>
-                  : (
-                    `${item.author} · ${item.title}`
-                  )}
-                </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums text-white/[0.44]">
-                  <span>{dockAwaitingPlayback ? '— / —' : `${formatMmSs(positionSec)} / ${durationSec > 0 ? formatMmSs(durationSec) : '—'}`}</span>
-                  <span>· Cap. {activeIndex + 1}/{tracks.length}</span>
-                  <button
-                    type="button"
-                    onClick={restartFromFirst}
-                    className="font-bold uppercase tracking-[0.04em] text-[#1ed760]/95 underline-offset-2 transition hover:text-[#1ed760] hover:underline"
-                  >
-                    Dal 1°
-                  </button>
-                </p>
+
+              <div
+                className="min-h-[2.75rem] min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] [scrollbar-color:rgba(255,255,255,0.35)_transparent] [scrollbar-width:thin] motion-reduce:scroll-auto"
+                tabIndex={0}
+                aria-label="Titolo e dettagli traccia — scorri orizzontalmente se il testo è lungo"
+              >
+                <div className="inline-block w-max space-y-0.5 pr-4 text-left">
+                  <p className="whitespace-nowrap text-[12px] font-semibold leading-snug text-white sm:text-[13px] motion-reduce:transition-none">
+                    {currentTitle ?? `Capitolo ${activeIndex + 1}`}
+                  </p>
+                  <p className="whitespace-nowrap text-[10px] leading-snug text-white/[0.58] sm:text-[11px]">
+                    {dockAwaitingPlayback ?
+                      <span className="inline-flex items-center gap-1.5 text-[#1ed760]/95">
+                        <DockSpinnerIcon className="h-3 w-3 shrink-0" />
+                        Connessione…
+                      </span>
+                    : (
+                      `${item.author} · ${item.title}`
+                    )}
+                  </p>
+                  <p className="inline-flex items-center gap-x-1.5 whitespace-nowrap text-[9px] tabular-nums text-white/[0.44] sm:text-[10px]">
+                    <span>{dockAwaitingPlayback ? '— / —' : `${formatMmSs(positionSec)} / ${durationSec > 0 ? formatMmSs(durationSec) : '—'}`}</span>
+                    <span>· Cap. {activeIndex + 1}/{tracks.length}</span>
+                    <button
+                      type="button"
+                      onClick={restartFromFirst}
+                      className="font-bold uppercase tracking-[0.04em] text-[#1ed760]/95 underline-offset-2 transition hover:text-[#1ed760] hover:underline"
+                    >
+                      Dal 1°
+                    </button>
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* z-[2] sopra le colonne laterali (z-[1]): altrimenti flex-1 a sinistra intercetta i tap sul play/pausa */}
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-[2] flex -translate-y-1/2 justify-center px-[min(42vw,8.5rem)] sm:px-36">
-              <div className="pointer-events-auto flex items-center gap-0.5 sm:gap-1">
-                <button
-                  type="button"
-                  onClick={goPrevChapter}
-                  aria-label={canPrevChapter ? 'Capitolo precedente' : 'Riavvia da inizio capitolo'}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/[0.1] hover:text-[#1ed760] active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100"
-                >
-                  <PrevChapterIcon className="h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={togglePlayPause}
-                  aria-label={
-                    dockAwaitingPlayback ?
-                      'Connessione in corso, tocca per riprovare o attendi'
-                    : playing ?
-                      'Pausa'
-                    : 'Riproduci'}
-                  className="mx-1 flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-[0_6px_20px_rgba(0,0,0,.4)] transition hover:scale-[1.04] active:scale-[0.96] motion-reduce:transition-none motion-reduce:hover:scale-100"
-                >
-                  {dockAwaitingPlayback ?
-                    <DockSpinnerIcon className="h-6 w-6 text-black" />
+            <div className="flex shrink-0 items-center justify-center gap-0.5 self-center sm:gap-1">
+              <button
+                type="button"
+                onClick={goPrevChapter}
+                aria-label={canPrevChapter ? 'Capitolo precedente' : 'Riavvia da inizio capitolo'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/[0.1] hover:text-[#1ed760] active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 sm:h-9 sm:w-9"
+              >
+                <PrevChapterIcon className="h-[1.05rem] w-[1.05rem] sm:h-5 sm:w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={togglePlayPause}
+                aria-label={
+                  dockAwaitingPlayback ?
+                    'Connessione in corso, tocca per riprovare o attendi'
                   : playing ?
-                    <PauseIcon className="h-5 w-5" />
-                  : <PlayIcon className="ml-0.5 h-[1.375rem] w-[1.375rem]" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={goNextChapter}
-                  disabled={!canNextChapter}
-                  aria-label={canNextChapter ? 'Prossimo capitolo' : 'Ultimo capitolo'}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-white transition enabled:hover:bg-white/[0.1] enabled:hover:text-[#1ed760] enabled:active:scale-95 disabled:text-white/30 motion-reduce:transition-none motion-reduce:hover:scale-100"
-                >
-                  <NextChapterIcon className="h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5" />
-                </button>
-              </div>
+                    'Pausa'
+                  : 'Riproduci'}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black shadow-[0_6px_20px_rgba(0,0,0,.4)] transition hover:scale-[1.04] active:scale-[0.96] motion-reduce:transition-none motion-reduce:hover:scale-100 sm:mx-0.5 sm:h-10 sm:w-10"
+              >
+                {dockAwaitingPlayback ?
+                  <DockSpinnerIcon className="h-5 w-5 text-black sm:h-6 sm:w-6" />
+                : playing ?
+                  <PauseIcon className="h-[1.15rem] w-[1.15rem] sm:h-5 sm:w-5" />
+                : <PlayIcon className="ml-0.5 h-[1.25rem] w-[1.25rem] sm:h-[1.375rem] sm:w-[1.375rem]" />}
+              </button>
+              <button
+                type="button"
+                onClick={goNextChapter}
+                disabled={!canNextChapter}
+                aria-label={canNextChapter ? 'Prossimo capitolo' : 'Ultimo capitolo'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition enabled:hover:bg-white/[0.1] enabled:hover:text-[#1ed760] enabled:active:scale-95 disabled:text-white/30 motion-reduce:transition-none motion-reduce:hover:scale-100 sm:h-9 sm:w-9"
+              >
+                <NextChapterIcon className="h-[1.05rem] w-[1.05rem] sm:h-5 sm:w-5" />
+              </button>
             </div>
 
-            <div className="z-[1] ml-auto flex shrink-0 items-center gap-1 pr-[var(--dock-pad-x)] pl-[min(37vw,6.75rem)] sm:gap-2 sm:pl-40">
+            <div className="flex min-w-0 items-center justify-end gap-0.5 self-center justify-self-end overflow-x-auto sm:gap-1.5">
               <button
                 type="button"
                 onClick={toggleMute}
                 aria-label={muted ? 'Riattiva audio' : 'Silenzia'}
                 aria-pressed={muted}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/[0.1] hover:text-white motion-reduce:transition-none"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/[0.1] hover:text-white motion-reduce:transition-none sm:h-9 sm:w-9"
               >
                 {muted || volumeLinear < 0.02 ?
-                  <VolumeMutedIcon className="h-[1.15rem] w-[1.15rem]" />
-                : <VolumeHighIcon className="h-[1.15rem] w-[1.15rem]" />}
+                  <VolumeMutedIcon className="h-[1.05rem] w-[1.05rem] sm:h-[1.15rem] sm:w-[1.15rem]" />
+                : <VolumeHighIcon className="h-[1.05rem] w-[1.05rem] sm:h-[1.15rem] sm:w-[1.15rem]" />}
               </button>
               <label htmlFor={`${audioLabelId}-vol`} className="sr-only">
                 Volume
@@ -790,19 +1104,92 @@ export function AudiobookAlbumListenView({
                 aria-valuemax={100}
                 aria-valuenow={Math.round(volumeLinear * 100)}
               />
+              {allowChapterSaves ?
+                <button
+                  type="button"
+                  onClick={toggleLikeCurrentChapter}
+                  aria-label={
+                    likedCurrent ? 'Togli dai salvati dell’area personale' : 'Salva questo capitolo nell’area personale'
+                  }
+                  aria-pressed={likedCurrent}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition motion-reduce:transition-none sm:h-9 sm:w-9 ${
+                    likedCurrent ? 'scale-105 text-[#1ed760]' : 'text-white/70 hover:scale-[1.05] hover:text-[#1ed760]'
+                  }`}
+                >
+                  <HeartIcon filled={likedCurrent} className="h-[1.1rem] w-[1.1rem] sm:h-6 sm:w-6" />
+                </button>
+              : null}
+            </div>
+          </div>
+        </div>
+      : null}
+
+      {guestLimitWallOpen ?
+        <div
+          className="fixed inset-0 z-[190] flex items-end justify-center p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.75rem,env(safe-area-inset-top))] sm:items-center sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="guest-limit-wall-title"
+        >
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Chiudi messaggio"
+            className="absolute inset-0 bg-black/52 backdrop-blur-[2px] transition-opacity"
+            style={{
+              opacity: guestWallDragPx > 0 ? Math.max(0.28, 0.52 - guestWallDragPx / 700) : undefined,
+            }}
+            onClick={closeGuestLimitWall}
+          />
+
+          <div
+            ref={guestWallPanelRef}
+            className={`relative z-[191] max-h-[min(88vh,36rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] px-6 py-6 shadow-[6px_8px_0px_#1A1A1A] md:px-8 md:py-10 ${
+              guestWallDragPx > 0 ? '' : 'transition-[transform,opacity] duration-200 ease-out'
+            }`}
+            style={{
+              transform: guestWallDragPx > 0 ? `translateY(${guestWallDragPx}px)` : undefined,
+              opacity:
+                guestWallDragPx > 0 ? Math.max(0.55, 1 - Math.min(guestWallDragPx / 420, 0.42)) : undefined,
+            }}
+          >
+            <div className="flex flex-col items-center pb-3 pt-0.5" aria-hidden>
+              <span className="h-1.5 w-14 rounded-full bg-[#1A1A1A]/22" />
+            </div>
+            <p className="sr-only">Puoi trascinare verso il basso per chiudere.</p>
+            <p className="mb-5 inline-flex rounded-lg border-[3px] border-[#1A1A1A] bg-[#f9e784] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#162327]">
+              Anteprima
+            </p>
+            <h2 id="guest-limit-wall-title" className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tracking-tight text-[#162327] md:text-[1.65rem]">
+              Ti piace Alveo?
+            </h2>
+            <p className="mt-4 text-[15px] leading-relaxed text-gray-800 md:text-[1.02rem]">
+              Per continuare ad ascoltare questo audiolibro — e usufruire di questo e degli altri contenuti — registra un
+              account dall’Area personale. È gratuita.
+            </p>
+            <p className="mt-4 rounded-xl border-2 border-dashed border-[#1A1A1A]/35 bg-white/85 px-4 py-3 text-sm font-medium leading-relaxed text-[#374550]">
+              Bastano pochi secondi dopo il login anche per il diario e i preferiti sugli altri percorsi.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
               <button
                 type="button"
-                onClick={toggleLikeCurrentChapter}
-                aria-label={
-                  likedCurrent ? 'Togli dai salvati dell’area personale' : 'Salva questo capitolo nell’area personale'
-                }
-                aria-pressed={likedCurrent}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition motion-reduce:transition-none ${
-                  likedCurrent ? 'scale-105 text-[#1ed760]' : 'text-white/70 hover:scale-[1.05] hover:text-[#1ed760]'
-                }`}
+                onClick={closeGuestLimitWall}
+                className="w-full rounded-xl border-[3px] border-[#1A1A1A]/30 bg-transparent px-5 py-3.5 font-['Space_Grotesk',sans-serif] text-sm font-bold text-[#374550] shadow-none transition hover:bg-white sm:w-auto"
               >
-                <HeartIcon filled={likedCurrent} className="h-[1.25rem] w-[1.25rem] sm:h-6 sm:w-6" />
+                Non ora
               </button>
+              {onOpenPersonalArea ?
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeGuestLimitWall()
+                    onOpenPersonalArea()
+                  }}
+                  className="w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#1ed760] px-5 py-3.5 font-['Space_Grotesk',sans-serif] text-sm font-bold text-[#0a0a0a] shadow-[3px_4px_0px_#1A1A1A] transition hover:brightness-105 sm:w-auto sm:min-w-[13rem]"
+                >
+                  Vai all’Area personale
+                </button>
+              : null}
             </div>
           </div>
         </div>

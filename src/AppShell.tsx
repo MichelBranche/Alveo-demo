@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { useNavTransition } from './components/NavigationTransition'
 import { useDiaryAuth } from './context/DiaryAuthContext'
+import { signOutDiaryCloud } from './lib/diaryCloud'
 import Lenis from 'lenis/react'
 import { NAV } from './nav'
 import type { NavId } from './nav'
@@ -62,6 +64,23 @@ function BackChevronIcon() {
   )
 }
 
+function shellUserDisplayName(session: Session | null): string {
+  if (!session?.user) return ''
+  const m = session.user.user_metadata as Record<string, unknown> | undefined
+  const pick = (k: string) => {
+    const v = m?.[k]
+    return typeof v === 'string' ? v.trim() : ''
+  }
+  const fromMeta = pick('display_name') || pick('full_name') || pick('name')
+  if (fromMeta) return fromMeta
+  const email = session.user.email?.trim()
+  if (email) {
+    const local = email.split('@')[0]
+    return local && local.length > 0 ? local : email
+  }
+  return 'Account'
+}
+
 function MenuIcon({ open }: { open: boolean }) {
   return (
     <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -96,8 +115,30 @@ export default function AppShell() {
     navPast: [],
   })
   const [menuOpen, setMenuOpen] = useState(false)
+  const [authBusy, setAuthBusy] = useState(false)
   const { runBehindCurtain } = useNavTransition()
-  const { cloudEnabled: diaryCloudOn } = useDiaryAuth()
+  const {
+    cloudEnabled: diaryCloudOn,
+    session,
+    supabase,
+    initializing: authInitializing,
+    devAuthBypass,
+  } = useDiaryAuth()
+
+  const drawerUserName = useMemo(() => shellUserDisplayName(session), [session])
+
+  const handleDrawerLogout = useCallback(async () => {
+    if (!supabase) return
+    setAuthBusy(true)
+    try {
+      await signOutDiaryCloud(supabase)
+      setMenuOpen(false)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setAuthBusy(false)
+    }
+  }, [supabase])
 
   const shellNavItems = useMemo(
     () => NAV.filter((n) => (n.id === 'diary' || n.id === 'oasi' ? diaryCloudOn : true)),
@@ -174,6 +215,46 @@ export default function AppShell() {
             onSelectNav={goToSection}
             onNavigate={() => setMenuOpen(false)}
           />
+
+          <div className="mt-8 border-t-2 border-[#1A1A1A]/12 pt-6">
+            {diaryCloudOn && authInitializing && !devAuthBypass ?
+              <p className="text-[13px] font-medium text-gray-600">Verifica dell&apos;accesso…</p>
+            : session ?
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-bold leading-snug text-[#1A1A1A]" title={drawerUserName}>
+                  {drawerUserName}
+                </p>
+                <button
+                  type="button"
+                  disabled={authBusy || !supabase}
+                  onClick={() => void handleDrawerLogout()}
+                  className="mt-2 rounded-lg border-2 border-[#1A1A1A]/40 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#374550] shadow-[1px_1px_0px_#1A1A1A] transition hover:bg-[#f4f0ea] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {authBusy ? 'Uscita…' : 'Esci'}
+                </button>
+              </div>
+            : diaryCloudOn ?
+              <button
+                type="button"
+                onClick={() => {
+                  goToSection('oasi')
+                  setMenuOpen(false)
+                }}
+                className="w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] px-4 py-3 text-left font-['Space_Grotesk',sans-serif] text-sm font-bold text-[#162327] shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:brightness-[1.02] active:translate-y-px active:shadow-[2px_2px_0px_#1A1A1A]"
+              >
+                Accedi o registrati
+                <span className="mt-1 block text-xs font-semibold normal-case tracking-normal text-[#374550]">
+                  Area personale · account gratuito
+                </span>
+              </button>
+            : devAuthBypass ?
+              <p className="text-[12px] leading-relaxed text-gray-600">Anteprima con bypass sviluppo senza login reale.</p>
+            : (
+              <p className="text-[12px] leading-relaxed text-gray-600">
+                Account cloud non configurato in questa copia dell&apos;app.
+              </p>
+            )}
+          </div>
         </div>
         <button
           type="button"

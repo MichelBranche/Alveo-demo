@@ -6,6 +6,8 @@ export type AudiobookOpenIntent = {
   audiobookId: string
   /** Indice 0-based nella playlist M3U */
   chapterIndex?: number
+  /** Riprendi la traccia da questo punto (secondi); richiede `chapterIndex` coerente. */
+  resumePositionSec?: number
 }
 
 export function stashAudiobookOpenIntent(intent: AudiobookOpenIntent) {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useDiaryAuth } from '../context/DiaryAuthContext'
 import { AudiobookAlbumListenView } from '../components/AudiobookAlbumListenView'
 import { AudiobookCover } from '../components/AudiobookCover'
 import { AUDIOBOOK_CATALOG, type AudiobookItem } from '../content/audiobooks'
@@ -10,10 +11,13 @@ const AUDIOBOOK_PREVIEW_COUNT = 3
 function CatalogMiniCard({
   item,
   onOpen,
+  density = 'comfortable',
 }: {
   item: AudiobookItem
   onOpen: (id: string) => void
+  density?: 'comfortable' | 'compact'
 }) {
+  const compact = density === 'compact'
   return (
     <button
       type="button"
@@ -27,15 +31,87 @@ function CatalogMiniCard({
         coverSrc={item.coverSrc}
         accent={item.accent}
         decorativeInLabel
-        className="transition group-hover:-translate-y-1 group-hover:shadow-[8px_8px_0px_#1A1A1A] group-active:translate-y-0 group-active:shadow-[4px_4px_0px_#1A1A1A]"
+        layout={compact ? 'catalog' : 'album'}
+        className={
+          compact ?
+            'motion-safe:transition motion-safe:group-active:scale-[0.98]'
+          : 'transition group-hover:-translate-y-1 group-hover:shadow-[8px_8px_0px_#1A1A1A] group-active:translate-y-0 group-active:shadow-[4px_4px_0px_#1A1A1A]'
+        }
       />
-      <h3 className="mt-3 line-clamp-2 font-['Space_Grotesk',sans-serif] text-[0.95rem] font-bold leading-snug text-[#162327] sm:text-base">
+      <h3
+        className={
+          compact ?
+            "mt-2 line-clamp-2 font-['Space_Grotesk',sans-serif] text-[13px] font-semibold leading-[1.22] text-[#162327]"
+          : "mt-3 line-clamp-2 font-['Space_Grotesk',sans-serif] text-[0.95rem] font-bold leading-snug text-[#162327] sm:text-base"
+        }
+      >
         {item.title}
       </h3>
-      <p className="mt-1 line-clamp-2 text-[12px] font-semibold uppercase leading-snug tracking-[0.08em] text-gray-600">
+      <p
+        className={
+          compact ?
+            'mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-gray-600'
+          : 'mt-1 line-clamp-2 text-[12px] font-semibold uppercase leading-snug tracking-[0.08em] text-gray-600'
+        }
+      >
         {item.author}
       </p>
     </button>
+  )
+}
+
+/** Mobile: rail in evidenza; catalogo completo = griglia 3 colonne con stesse tile compatte. Desktop: griglia classica. */
+function AudiobookCatalogTiles({
+  items,
+  onOpen,
+  mobileLayout,
+}: {
+  items: AudiobookItem[]
+  onOpen: (id: string) => void
+  /** `rail` = anteprima scorrevole; `grid3` = tutti i titoli, 3 per riga */
+  mobileLayout: 'rail' | 'grid3'
+}) {
+  return (
+    <>
+      {mobileLayout === 'rail' ?
+        <div className="@container min-w-0 w-full md:hidden">
+          <ul
+            role="list"
+            aria-label="Catalogo audiolibri, scorrimento orizzontale"
+            className="flex snap-x snap-proximity gap-2.5 overflow-x-auto pb-1 pt-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-color:rgba(26,26,26,0.3)_transparent] [scrollbar-width:thin]"
+          >
+            {items.map((item) => (
+              <li
+                key={item.id}
+                className="w-[clamp(9rem,calc((100cqw-0.75rem*2)/2.45),11.25rem)] shrink-0 snap-start"
+              >
+                <CatalogMiniCard item={item} onOpen={onOpen} density="compact" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      : (
+        <ul
+          role="list"
+          aria-label="Catalogo completo audiolibri"
+          className="grid list-none grid-cols-3 gap-x-2 gap-y-5 md:hidden"
+        >
+          {items.map((item) => (
+            <li key={item.id} className="min-w-0">
+              <CatalogMiniCard item={item} onOpen={onOpen} density="compact" />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <ul className="hidden list-none gap-x-6 gap-y-10 md:grid md:grid-cols-2 lg:grid-cols-3 lg:gap-x-8">
+        {items.map((item) => (
+          <li key={item.id}>
+            <CatalogMiniCard item={item} onOpen={onOpen} density="comfortable" />
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 
@@ -52,8 +128,10 @@ type Props = {
 }
 
 export default function ToolsAudiobooksPage({ onSelectNav }: Props) {
+  const { canUseOasis } = useDiaryAuth()
   const [openId, setOpenId] = useState<string | null>(null)
   const [chapterOpenIntent, setChapterOpenIntent] = useState<number | null>(null)
+  const [resumePositionIntentSec, setResumePositionIntentSec] = useState<number | undefined>()
   const [fullAudiobookCatalog, setFullAudiobookCatalog] = useState(false)
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
 
@@ -75,15 +153,22 @@ export default function ToolsAudiobooksPage({ onSelectNav }: Props) {
     if (typeof intent.chapterIndex === 'number' && Number.isFinite(intent.chapterIndex)) {
       setChapterOpenIntent(Math.max(0, Math.floor(intent.chapterIndex)))
     }
+    if (typeof intent.resumePositionSec === 'number' && Number.isFinite(intent.resumePositionSec)) {
+      const r = intent.resumePositionSec
+      setResumePositionIntentSec(Math.max(0, r))
+    }
   }, [])
 
   const handleOpen = useCallback((id: string) => {
     setChapterOpenIntent(null)
+    setResumePositionIntentSec(undefined)
     setOpenId(id)
   }, [])
 
   const handleBack = useCallback(() => {
     setOpenId(null)
+    setChapterOpenIntent(null)
+    setResumePositionIntentSec(undefined)
   }, [])
 
   useEffect(() => {
@@ -96,8 +181,21 @@ export default function ToolsAudiobooksPage({ onSelectNav }: Props) {
         <AudiobookAlbumListenView
           item={opened}
           onBack={handleBack}
+          fullPlaybackUnlocked={canUseOasis}
+          persistAudiobookLastPlayback={canUseOasis}
+          allowChapterSaves={canUseOasis}
           pendingChapterIndex={chapterOpenIntent ?? undefined}
-          onPendingChapterApplied={() => setChapterOpenIntent(null)}
+          onPendingChapterApplied={() => {
+            // Mantieni l’indice finché è in corso un resume (Strict Mode + ordine degli effect riempie di nuovo il bundle sul remount).
+            if (typeof resumePositionIntentSec === 'number') return
+            setChapterOpenIntent(null)
+          }}
+          pendingResumePositionSec={resumePositionIntentSec}
+          onPendingResumeApplied={() => {
+            setResumePositionIntentSec(undefined)
+            setChapterOpenIntent(null)
+          }}
+          onOpenPersonalArea={() => onSelectNav?.('oasi')}
         />
       </div>
     )
@@ -130,13 +228,11 @@ export default function ToolsAudiobooksPage({ onSelectNav }: Props) {
           </p>
         </div>
 
-        <ul className="grid list-none gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 md:gap-x-8">
-          {(fullAudiobookCatalog ? AUDIOBOOK_CATALOG : previewItems).map((item) => (
-            <li key={item.id}>
-              <CatalogMiniCard item={item} onOpen={handleOpen} />
-            </li>
-          ))}
-        </ul>
+        <AudiobookCatalogTiles
+          items={fullAudiobookCatalog ? AUDIOBOOK_CATALOG : previewItems}
+          onOpen={handleOpen}
+          mobileLayout={fullAudiobookCatalog ? 'grid3' : 'rail'}
+        />
 
         {hasMoreAudiobooks && !fullAudiobookCatalog ?
           <div className="flex justify-center">

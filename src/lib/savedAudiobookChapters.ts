@@ -85,3 +85,13 @@ export function removeSavedAudiobookChapter(audiobookId: string, chapterIndex: n
   )
   persist(list)
 }
+
+/** Svuota i capitoli salvati sul dispositivo (es. logout). */
+export function clearSavedAudiobookChapters() {
+  try {
+    localStorage.removeItem(SAVED_AUDIO_CHAPTERS_KEY)
+  } catch {
+    /* ignore */
+  }
+  notifyChanged()
+}
