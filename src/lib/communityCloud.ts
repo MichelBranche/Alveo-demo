@@ -4,6 +4,15 @@ export const COMMUNITY_GLOBAL_BODY_MAX = 1200
 export const COMMUNITY_DM_BODY_MAX = 2000
 export const COMMUNITY_ONLINE_WINDOW_MS = 90_000
 
+/** Prima pagina chat globale */
+export const COMMUNITY_GLOBAL_INITIAL = 120
+/** Ogni “carica precedenti” chat globale */
+export const COMMUNITY_GLOBAL_PAGE = 80
+/** Prima pagina DM */
+export const COMMUNITY_DM_INITIAL = 120
+/** Ogni “carica precedenti” DM */
+export const COMMUNITY_DM_PAGE = 80
+
 export type CommunityProfile = {
   user_id: string
   display_name: string
@@ -40,6 +49,18 @@ export function sanitizeCommunityBody(raw: string, maxLen: number): string {
   return t.length > maxLen ? t.slice(0, maxLen) : t
 }
 
+/** Evita query GET troppo lunghe (`.in` con molti UUID supera spesso il limite URL). */
+const COMMUNITY_PROFILE_IN_CHUNK = 40
+
+export function readSupabaseClientMessage(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object' && 'message' in e) {
+    const m = (e as { message: unknown }).message
+    if (typeof m === 'string' && m.length > 0) return m
+  }
+  return 'Errore sconosciuto'
+}
+
 export async function fetchCommunityProfiles(
   sb: SupabaseClient,
   userIds: string[],
@@ -47,10 +68,13 @@ export async function fetchCommunityProfiles(
   const map = new Map<string, CommunityProfile>()
   const ids = [...new Set(userIds)].filter(Boolean)
   if (ids.length === 0) return map
-  const { data, error } = await sb.from('community_profiles').select('*').in('user_id', ids)
-  if (error) throw error
-  for (const row of data ?? []) {
-    map.set((row as CommunityProfile).user_id, row as CommunityProfile)
+  for (let i = 0; i < ids.length; i += COMMUNITY_PROFILE_IN_CHUNK) {
+    const chunk = ids.slice(i, i + COMMUNITY_PROFILE_IN_CHUNK)
+    const { data, error } = await sb.from('community_profiles').select('*').in('user_id', chunk)
+    if (error) throw error
+    for (const row of data ?? []) {
+      map.set((row as CommunityProfile).user_id, row as CommunityProfile)
+    }
   }
   return map
 }
@@ -100,12 +124,18 @@ export async function upsertCommunityProfile(
   if (error) throw error
 }
 
-export async function fetchGlobalMessages(sb: SupabaseClient, limit = 120): Promise<GlobalMessageRow[]> {
-  const { data, error } = await sb
+export async function fetchGlobalMessages(
+  sb: SupabaseClient,
+  opts?: { limit?: number; beforeCreatedAt?: string | null },
+): Promise<GlobalMessageRow[]> {
+  const limit = opts?.limit ?? COMMUNITY_GLOBAL_INITIAL
+  let q = sb
     .from('community_global_messages')
     .select('id,user_id,body,created_at')
     .order('created_at', { ascending: false })
     .limit(limit)
+  if (opts?.beforeCreatedAt) q = q.lt('created_at', opts.beforeCreatedAt)
+  const { data, error } = await q
   if (error) throw error
   const rows = (data ?? []) as GlobalMessageRow[]
   return rows.reverse()
@@ -208,18 +238,22 @@ export async function fetchDirectMessages(
   sb: SupabaseClient,
   me: string,
   other: string,
-  limit = 150,
+  opts?: { limit?: number; beforeCreatedAt?: string | null },
 ): Promise<DirectMessageRow[]> {
-  const { data, error } = await sb
+  const limit = opts?.limit ?? COMMUNITY_DM_INITIAL
+  let q = sb
     .from('community_direct_messages')
     .select('*')
     .or(
       `and(sender_id.eq.${me},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${me})`,
     )
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit)
+  if (opts?.beforeCreatedAt) q = q.lt('created_at', opts.beforeCreatedAt)
+  const { data, error } = await q
   if (error) throw error
-  return (data ?? []) as DirectMessageRow[]
+  const rows = (data ?? []) as DirectMessageRow[]
+  return rows.reverse()
 }
 
 export async function sendDirectMessage(sb: SupabaseClient, senderId: string, recipientId: string, body: string) {

@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
 import { getDiarySupabase } from '../lib/diaryCloud'
 import {
   acceptFriendRequestRpc,
   COMMUNITY_DM_BODY_MAX,
+  COMMUNITY_DM_INITIAL,
+  COMMUNITY_DM_PAGE,
   COMMUNITY_GLOBAL_BODY_MAX,
+  COMMUNITY_GLOBAL_INITIAL,
+  COMMUNITY_GLOBAL_PAGE,
   fetchCommunityProfiles,
   fetchCommunityOnlineCount,
   fetchDirectMessages,
@@ -16,6 +20,7 @@ import {
   otherFriendId,
   rejectFriendRequest,
   sanitizeCommunityBody,
+  readSupabaseClientMessage,
   searchCommunityProfiles,
   sendDirectMessage,
   sendFriendRequest,
@@ -58,6 +63,8 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const [profileMap, setProfileMap] = useState<Map<string, CommunityProfile>>(new Map())
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
   const [globalBusy, setGlobalBusy] = useState(false)
+  const [globalLoadingOlder, setGlobalLoadingOlder] = useState(false)
+  const [globalHasMore, setGlobalHasMore] = useState(true)
   const [globalError, setGlobalError] = useState<string | null>(null)
   const [draftGlobal, setDraftGlobal] = useState('')
 
@@ -73,9 +80,16 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const [searchHits, setSearchHits] = useState<CommunityProfile[]>([])
   const [dmPeer, setDmPeer] = useState<CommunityProfile | null>(null)
   const [dmRows, setDmRows] = useState<DirectMessageRow[]>([])
+  const [dmLoadingOlder, setDmLoadingOlder] = useState(false)
+  const [dmHasMore, setDmHasMore] = useState(true)
   const [draftDm, setDraftDm] = useState('')
 
   const globalListRef = useRef<HTMLDivElement>(null)
+  const preserveGlobalScrollRef = useRef<{ h: number; t: number } | null>(null)
+  const scrollGlobalBottomRef = useRef(false)
+  const dmListRef = useRef<HTMLDivElement>(null)
+  const preserveDmScrollRef = useRef<{ h: number; t: number } | null>(null)
+  const scrollDmBottomRef = useRef(false)
   const rtGlobalRef = useRef<RealtimeChannel | null>(null)
   const rtDmRef = useRef<RealtimeChannel | null>(null)
   const hbTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -97,13 +111,49 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     try {
       const rows = await fetchGlobalMessages(sb)
       setGlobalMessages(rows)
-      await refreshProfilesForMessages(rows)
+      setGlobalHasMore(rows.length >= COMMUNITY_GLOBAL_INITIAL)
+      scrollGlobalBottomRef.current = true
+      try {
+        await refreshProfilesForMessages(rows)
+      } catch {
+        /* profili secondari: la chat resta visibile anche se i nomi non arrivano */
+      }
     } catch (e) {
-      setGlobalError(e instanceof Error ? e.message : 'Errore caricamento chat')
+      setGlobalError(readSupabaseClientMessage(e) || 'Errore caricamento chat')
     } finally {
       setGlobalBusy(false)
     }
   }, [sb, refreshProfilesForMessages])
+
+  const loadOlderGlobal = useCallback(async () => {
+    if (!sb || globalMessages.length === 0 || globalLoadingOlder || !globalHasMore) return
+    const el = globalListRef.current
+    if (el) preserveGlobalScrollRef.current = { h: el.scrollHeight, t: el.scrollTop }
+    const oldest = globalMessages[0]
+    setGlobalLoadingOlder(true)
+    setGlobalError(null)
+    try {
+      const older = await fetchGlobalMessages(sb, {
+        limit: COMMUNITY_GLOBAL_PAGE,
+        beforeCreatedAt: oldest.created_at,
+      })
+      const existing = new Set(globalMessages.map((m) => m.id))
+      const merged = older.filter((m) => !existing.has(m.id))
+      setGlobalMessages((prev) => [...merged, ...prev])
+      setGlobalHasMore(older.length >= COMMUNITY_GLOBAL_PAGE)
+      if (merged.length > 0) {
+        try {
+          await refreshProfilesForMessages(merged)
+        } catch {
+          /* vedi loadGlobal */
+        }
+      }
+    } catch (e) {
+      setGlobalError(readSupabaseClientMessage(e) || 'Errore caricamento storico')
+    } finally {
+      setGlobalLoadingOlder(false)
+    }
+  }, [sb, globalMessages, globalLoadingOlder, globalHasMore, refreshProfilesForMessages])
 
   const mergeProfile = useCallback((p: CommunityProfile) => {
     setProfileMap((prev) => new Map(prev).set(p.user_id, p))
@@ -114,6 +164,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     void loadGlobal()
     rtGlobalRef.current?.unsubscribe()
     rtGlobalRef.current = subscribeGlobalMessages(sb, (row) => {
+      scrollGlobalBottomRef.current = true
       setGlobalMessages((prev) => {
         if (prev.some((x) => x.id === row.id)) return prev
         return [...prev, row]
@@ -129,10 +180,33 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     }
   }, [sb, uid, canUseDiary, loadGlobal, mergeProfile])
 
-  useEffect(() => {
-    if (!globalListRef.current) return
-    globalListRef.current.scrollTop = globalListRef.current.scrollHeight
-  }, [globalMessages.length])
+  useLayoutEffect(() => {
+    const el = globalListRef.current
+    const p = preserveGlobalScrollRef.current
+    if (el && p) {
+      el.scrollTop = el.scrollHeight - p.h + p.t
+      preserveGlobalScrollRef.current = null
+      return
+    }
+    if (el && scrollGlobalBottomRef.current) {
+      el.scrollTop = el.scrollHeight
+      scrollGlobalBottomRef.current = false
+    }
+  }, [globalMessages])
+
+  useLayoutEffect(() => {
+    const el = dmListRef.current
+    const p = preserveDmScrollRef.current
+    if (el && p) {
+      el.scrollTop = el.scrollHeight - p.h + p.t
+      preserveDmScrollRef.current = null
+      return
+    }
+    if (el && scrollDmBottomRef.current) {
+      el.scrollTop = el.scrollHeight
+      scrollDmBottomRef.current = false
+    }
+  }, [dmRows])
 
   useEffect(() => {
     if (!sb || !uid || !canUseDiary) return
@@ -206,13 +280,17 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     void (async () => {
       try {
         const rows = await fetchDirectMessages(sb, uid, dmPeer.user_id)
+        setDmHasMore(rows.length >= COMMUNITY_DM_INITIAL)
+        scrollDmBottomRef.current = true
         setDmRows(rows)
       } catch {
+        setDmHasMore(false)
         setDmRows([])
       }
     })()
     rtDmRef.current?.unsubscribe()
     rtDmRef.current = subscribeDirectMessages(sb, uid, dmPeer.user_id, (row) => {
+      scrollDmBottomRef.current = true
       setDmRows((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]))
     })
     return () => {
@@ -221,12 +299,35 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     }
   }, [sb, uid, dmPeer, canUseDiary])
 
+  const loadOlderDm = useCallback(async () => {
+    if (!sb || !uid || !dmPeer || dmRows.length === 0 || dmLoadingOlder || !dmHasMore) return
+    const el = dmListRef.current
+    if (el) preserveDmScrollRef.current = { h: el.scrollHeight, t: el.scrollTop }
+    const oldest = dmRows[0]
+    setDmLoadingOlder(true)
+    try {
+      const older = await fetchDirectMessages(sb, uid, dmPeer.user_id, {
+        limit: COMMUNITY_DM_PAGE,
+        beforeCreatedAt: oldest.created_at,
+      })
+      const existing = new Set(dmRows.map((m) => m.id))
+      const merged = older.filter((m) => !existing.has(m.id))
+      setDmRows((prev) => [...merged, ...prev])
+      setDmHasMore(older.length >= COMMUNITY_DM_PAGE)
+    } catch {
+      /* */
+    } finally {
+      setDmLoadingOlder(false)
+    }
+  }, [sb, uid, dmPeer, dmRows, dmLoadingOlder, dmHasMore])
+
   const onSendGlobal = useCallback(async () => {
     if (!sb || !uid) return
     const body = sanitizeCommunityBody(draftGlobal, COMMUNITY_GLOBAL_BODY_MAX)
     if (!body) return
     setDraftGlobal('')
     try {
+      scrollGlobalBottomRef.current = true
       await sendGlobalMessage(sb, uid, body)
     } catch (e) {
       setGlobalError(e instanceof Error ? e.message : 'Invio non riuscito')
@@ -307,6 +408,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     if (!body) return
     setDraftDm('')
     try {
+      scrollDmBottomRef.current = true
       await sendDirectMessage(sb, uid, dmPeer.user_id, body)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Messaggio non inviato (serve amicizia accettata).')
@@ -375,6 +477,18 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
           aria-label="Chat globale"
         >
           <div ref={globalListRef} className="max-h-[min(52vh,28rem)] flex-1 space-y-3 overflow-y-auto p-4">
+            {globalMessages.length > 0 && globalHasMore ?
+              <div className="flex justify-center pb-1">
+                <button
+                  type="button"
+                  disabled={globalLoadingOlder}
+                  onClick={() => void loadOlderGlobal()}
+                  className="rounded-lg border-2 border-[#1A1A1A]/40 bg-white px-3 py-1.5 text-xs font-bold text-[#374550] shadow-[1px_1px_0px_#1A1A1A] disabled:opacity-50"
+                >
+                  {globalLoadingOlder ? 'Carico…' : 'Carica messaggi precedenti'}
+                </button>
+              </div>
+            : null}
             {globalBusy && globalMessages.length === 0 ?
               <p className="text-sm text-gray-600">Carico i messaggi…</p>
             : null}
@@ -540,10 +654,24 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
               <p className="text-xs font-bold uppercase tracking-[0.1em] text-gray-600">Messaggi privati</p>
               <p className="font-semibold text-[#162327]">{dmPeer?.display_name ?? 'Scegli un amico'}</p>
             </div>
-            <div className="max-h-[min(40vh,20rem)] flex-1 space-y-2 overflow-y-auto p-3">
+            <div ref={dmListRef} className="max-h-[min(40vh,20rem)] flex-1 space-y-2 overflow-y-auto p-3">
               {!dmPeer ?
                 <p className="text-sm text-gray-600">Seleziona un amico dalla lista a sinistra.</p>
-              : dmRows.map((m) => {
+              : null}
+              {dmPeer && dmRows.length > 0 && dmHasMore ?
+                <div className="flex justify-center pb-1">
+                  <button
+                    type="button"
+                    disabled={dmLoadingOlder}
+                    onClick={() => void loadOlderDm()}
+                    className="rounded-lg border-2 border-[#1A1A1A]/35 bg-white px-3 py-1.5 text-xs font-bold text-[#374550] shadow-[1px_1px_0px_#1A1A1A] disabled:opacity-50"
+                  >
+                    {dmLoadingOlder ? 'Carico…' : 'Carica messaggi precedenti'}
+                  </button>
+                </div>
+              : null}
+              {dmPeer ?
+                dmRows.map((m) => {
                   const mine = m.sender_id === uid
                   return (
                     <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
@@ -558,7 +686,8 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                       </div>
                     </div>
                   )
-                })}
+                })
+              : null}
             </div>
             <div className="mt-auto border-t-2 border-[#1A1A1A]/10 p-3">
               <textarea

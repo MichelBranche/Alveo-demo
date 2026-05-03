@@ -17,6 +17,12 @@ create index if not exists community_events_starts_at_idx
 
 alter table public.community_events enable row level security;
 
+-- Idempotente: rieseguire lo script non fallisce se le policy esistono già.
+drop policy if exists community_events_select_public_future on public.community_events;
+drop policy if exists community_events_insert_auth on public.community_events;
+drop policy if exists community_events_update_own on public.community_events;
+drop policy if exists community_events_delete_own on public.community_events;
+
 -- Home e app: chiunque (anche anon con la publishable key) può leggere eventi futuri.
 create policy community_events_select_public_future
   on public.community_events for select
