@@ -7,6 +7,7 @@ import { getDiarySupabase } from '../lib/diaryCloud'
 import {
   attachUserAppProfilePushOnHide,
   pullUserAppProfile,
+  scheduleUserAppProfilePush,
   setUserAppProfileSyncContext,
 } from '../lib/userAppPreferencesCloud'
 
@@ -80,7 +81,9 @@ export function DiaryAuthProvider({ children }: { children: ReactNode }) {
     }
     const uid = session.user.id
     setUserAppProfileSyncContext(supabase, uid)
-    void pullUserAppProfile(supabase, uid).catch((e) => console.warn('Profilo app (pull):', e))
+    void pullUserAppProfile(supabase, uid)
+      .then(() => scheduleUserAppProfilePush())
+      .catch((e) => console.warn('Profilo app (pull):', e))
     const detach = attachUserAppProfilePushOnHide()
     return () => {
       detach()
