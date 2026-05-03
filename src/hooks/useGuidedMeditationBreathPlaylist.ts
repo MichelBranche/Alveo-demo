@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 
 import { GUIDED_MEDITATION_TRACK_FILENAMES } from '../content/guidedMeditationTracks'
+import { attachSimpleAmbientMediaSession } from '../lib/mediaSessionHtmlAudio'
 
 function shuffleCopy<T>(arr: readonly T[], rnd: () => number): T[] {
   const a = [...arr]
@@ -23,6 +24,7 @@ export function useGuidedMeditationBreathPlaylist() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const queueRef = useRef<string[]>([])
   const nextIdxRef = useRef(0)
+  const mediaSessionCleanupRef = useRef<(() => void) | null>(null)
 
   const playNext = useCallback(() => {
     const tracks = GUIDED_MEDITATION_TRACK_FILENAMES
@@ -31,6 +33,8 @@ export function useGuidedMeditationBreathPlaylist() {
     let a = audioRef.current
     if (!a) {
       a = new Audio()
+      a.setAttribute('playsinline', '')
+      a.preload = 'auto'
       audioRef.current = a
     }
 
@@ -49,8 +53,14 @@ export function useGuidedMeditationBreathPlaylist() {
         baseRaw
       : '/'
     const prefix = base.endsWith('/') ? base : `${base}/`
+    mediaSessionCleanupRef.current?.()
+    mediaSessionCleanupRef.current = null
     a.src = `${prefix}meditation-playlist/${encodeURIComponent(filename)}`
     a.volume = DEFAULT_VOLUME
+    mediaSessionCleanupRef.current = attachSimpleAmbientMediaSession(a, {
+      title: 'Ambiente sonoro',
+      artist: 'Alveo · meditazioni guidate',
+    })
     a.onended = () => {
       playNext()
     }
@@ -60,6 +70,8 @@ export function useGuidedMeditationBreathPlaylist() {
   }, [])
 
   const stop = useCallback(() => {
+    mediaSessionCleanupRef.current?.()
+    mediaSessionCleanupRef.current = null
     const a = audioRef.current
     if (!a) return
     a.onended = null
@@ -79,7 +91,12 @@ export function useGuidedMeditationBreathPlaylist() {
     queueRef.current = shuffleCopy(tracks, Math.random)
     nextIdxRef.current = 0
 
-    if (!audioRef.current) audioRef.current = new Audio()
+    if (!audioRef.current) {
+      const el = new Audio()
+      el.setAttribute('playsinline', '')
+      el.preload = 'auto'
+      audioRef.current = el
+    }
     audioRef.current.volume = DEFAULT_VOLUME
 
     playNext()

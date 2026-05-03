@@ -7,6 +7,7 @@ import {
   SAVED_CHAPTERS_CHANGED,
   toggleSavedAudiobookChapter,
 } from '../lib/savedAudiobookChapters'
+import { attachAudiobookHtmlAudioMediaSession } from '../lib/mediaSessionHtmlAudio'
 import { AudiobookCover } from './AudiobookCover'
 
 function PlayIcon({ className = 'h-7 w-7' }: { className?: string }) {
@@ -674,6 +675,52 @@ export function AudiobookAlbumListenView({
     }
   }, [activeIndex, selectTrack])
 
+  const chapterLabelForUi = currentTitle ?? `Capitolo ${activeIndex + 1}`
+
+  useEffect(() => {
+    const el = audioRef.current
+    if (!el || !tracks?.length) return
+    return attachAudiobookHtmlAudioMediaSession(
+      el,
+      {
+        albumTitle: item.title,
+        artist: item.author,
+        chapterTitle: chapterLabelForUi,
+        coverSrc: item.coverSrc ?? '/favicon.svg',
+        canPrevChapter,
+        canNextChapter,
+      },
+      {
+        play: () => {
+          void el.play().catch(() => {})
+        },
+        pause: () => {
+          el.pause()
+        },
+        prevChapter: () => {
+          goPrevChapter()
+        },
+        nextChapter: () => {
+          goNextChapter()
+        },
+        seekBy: (deltaSec) => {
+          seekTo(el.currentTime + deltaSec)
+        },
+      },
+    )
+  }, [
+    tracks?.length,
+    item.title,
+    item.author,
+    item.coverSrc,
+    chapterLabelForUi,
+    canPrevChapter,
+    canNextChapter,
+    goPrevChapter,
+    goNextChapter,
+    seekTo,
+  ])
+
   const showHeroPlayControl = !!(item.audio && !loading && !error && tracks && tracks.length > 0)
 
   const showDockPlayer = !!(tracks?.length && launcherDismissed)
@@ -749,7 +796,7 @@ export function AudiobookAlbumListenView({
     <>
       {/* Motore HTML5 montato quando la playlist è pronta (controllato dalla barra fissa). */}
       {tracks && tracks.length > 0 ?
-        <audio ref={audioRef} preload="metadata" className="sr-only" tabIndex={-1} />
+        <audio ref={audioRef} preload="metadata" playsInline className="sr-only" tabIndex={-1} />
       : null}
 
       <div

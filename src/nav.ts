@@ -10,6 +10,7 @@ export const NAV = [
   },
   { id: 'tools', emoji: '📚', label: 'Strumenti e Audiolibri', shortTitle: 'Strumenti' },
   { id: 'diary', emoji: '✍️', label: 'Diario di Defusione', shortTitle: 'Diario' },
+  { id: 'community', emoji: '💬', label: 'Community', shortTitle: 'Community' },
 ] as const
 
 export type NavId = (typeof NAV)[number]['id']

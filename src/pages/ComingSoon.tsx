@@ -4,7 +4,7 @@ import { NAV } from '../nav'
 export default function ComingSoon({
   navId,
 }: {
-  navId: Exclude<NavId, 'home' | 'oasi' | 'tools' | 'med' | 'diary' | 'relax'>
+  navId: Exclude<NavId, 'home' | 'oasi' | 'tools' | 'med' | 'diary' | 'relax' | 'community'>
 }) {
   const meta = NAV.find((n) => n.id === navId)
   const title = meta?.label ?? 'Sezione'

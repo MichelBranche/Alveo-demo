@@ -1,7 +1,9 @@
 import { CurtainLink } from '../components/NavigationTransition'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
+import CommunityEventsHomeSection from '../components/CommunityEventsHomeSection'
 import LandingServiceProposals from '../components/LandingServiceProposals'
 import SesameHomeTeaser from '../components/SesameHomeTeaser'
+import SupportAlveoSection from '../components/SupportAlveoSection'
 import TeletherapyPartnersSection from '../components/TeletherapyPartnersSection'
 import type { NavId } from '../nav'
 
@@ -66,6 +68,8 @@ export default function HomeLandingPage({
 
       <SesameHomeTeaser />
 
+      <CommunityEventsHomeSection onSelectNav={onSelectNav} />
+
       <section
         className="rounded-3xl border-[3px] border-[#1A1A1A] bg-white p-6 shadow-[5px_5px_0px_#1A1A1A] md:flex md:flex-row md:items-center md:justify-between md:gap-10 md:p-10"
         aria-labelledby="landing-account-heading"
@@ -123,6 +127,8 @@ export default function HomeLandingPage({
       </section>
 
       <TeletherapyPartnersSection />
+
+      <SupportAlveoSection />
 
     </div>
   )

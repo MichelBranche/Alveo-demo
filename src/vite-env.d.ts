@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   readonly BASE?: string
   readonly VITE_SUPABASE_URL?: string
   readonly VITE_SUPABASE_ANON_KEY?: string
+  /** URL checkout / pagina sostegno (Stripe, Ko-fi, ecc.) per la sezione home. */
+  readonly VITE_ALVEO_SUPPORT_URL?: string
 }
 
 interface ImportMeta {

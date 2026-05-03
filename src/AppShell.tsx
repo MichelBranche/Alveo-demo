@@ -6,9 +6,11 @@ import { signOutDiaryCloud } from './lib/diaryCloud'
 import Lenis from 'lenis/react'
 import { NAV } from './nav'
 import type { NavId } from './nav'
+import InstallOnDeviceSheet, { InstallOnDeviceDrawerButton } from './components/InstallOnDeviceSheet'
 import ComingSoon from './pages/ComingSoon'
 import HomeLandingPage from './pages/HomeLandingPage'
 import PersonalOasisPage from './pages/PersonalOasisPage'
+import CommunityPage from './pages/CommunityPage'
 import DefusionDiaryPage from './pages/DefusionDiaryPage'
 import GuidedMeditationPage from './pages/GuidedMeditationPage'
 import RelaxationTechniquesPage from './pages/RelaxationTechniquesPage'
@@ -115,6 +117,7 @@ export default function AppShell() {
     navPast: [],
   })
   const [menuOpen, setMenuOpen] = useState(false)
+  const [installSheetOpen, setInstallSheetOpen] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
   const { runBehindCurtain } = useNavTransition()
   const {
@@ -141,7 +144,8 @@ export default function AppShell() {
   }, [supabase])
 
   const shellNavItems = useMemo(
-    () => NAV.filter((n) => (n.id === 'diary' || n.id === 'oasi' ? diaryCloudOn : true)),
+    () =>
+      NAV.filter((n) => (n.id === 'diary' || n.id === 'oasi' || n.id === 'community' ? diaryCloudOn : true)),
     [diaryCloudOn],
   )
 
@@ -216,6 +220,13 @@ export default function AppShell() {
             onNavigate={() => setMenuOpen(false)}
           />
 
+          <InstallOnDeviceDrawerButton
+            onOpen={() => {
+              setMenuOpen(false)
+              setInstallSheetOpen(true)
+            }}
+          />
+
           <div className="mt-8 border-t-2 border-[#1A1A1A]/12 pt-6">
             {diaryCloudOn && authInitializing && !devAuthBypass ?
               <p className="text-[13px] font-medium text-gray-600">Verifica dell&apos;accesso…</p>
@@ -265,6 +276,8 @@ export default function AppShell() {
           Protocollo SOS
         </button>
       </aside>
+
+      <InstallOnDeviceSheet open={installSheetOpen} onClose={() => setInstallSheetOpen(false)} />
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="shrink-0 border-b-2 border-[#1A1A1A] bg-[#F4F0EA]">
@@ -322,6 +335,8 @@ export default function AppShell() {
               <RelaxationTechniquesPage onSelectNav={goToSection} />
             ) : activeNav === 'diary' ? (
               <DefusionDiaryPage />
+            ) : activeNav === 'community' ? (
+              <CommunityPage onSelectNav={goToSection} />
             ) : (
               <ComingSoon navId={activeNav} />
             )}
