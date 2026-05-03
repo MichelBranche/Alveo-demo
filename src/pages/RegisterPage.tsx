@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useId, useMemo, useRef, useState } from 'react'
+import { GoogleSignInButton } from '../components/GoogleSignInButton'
 import { CurtainLink } from '../components/NavigationTransition'
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
@@ -55,6 +56,7 @@ export default function RegisterPage() {
   const [postSubmit, setPostSubmit] = useState<'logged_in' | 'confirm_email' | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [oauthError, setOauthError] = useState<string | null>(null)
 
   const passwordStrength = useMemo(() => getPasswordStrength(password), [password])
 
@@ -151,8 +153,8 @@ export default function RegisterPage() {
             Registrazione
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-gray-700">
-            Le password e i dati sensibili non vengono salvati in questa app: andranno solo al backend su canale
-            cifrato (HTTPS). Non usare password riutilizzate da altri servizi.
+            Puoi usare Google oppure email e password. Le password e i dati sensibili non restano in questo schermo:
+            vanno al servizio di autenticazione su canale HTTPS. Non usare password riutilizzate da altri servizi.
           </p>
         </div>
 
@@ -164,7 +166,7 @@ export default function RegisterPage() {
             {postSubmit === 'logged_in' ? (
               <>
                 <p className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#1A1A1A]">
-                  Account creato — sei dentro
+                  Account creato: sei dentro
                 </p>
                 <p className="mt-3 text-[15px] leading-relaxed text-gray-800">
                   La sessione è attiva: puoi usare diario e oasi collegate al cloud. Se qualcosa non si aggiorna subito,
@@ -180,6 +182,12 @@ export default function RegisterPage() {
                   Il servizio richiede di confermare l&apos;indirizzo email prima di entrare nell&apos;app. Apri il link
                   nel messaggio; dopo la conferma potrai eseguire l&apos;accesso da «Accedi» o dal pannello nel diario.
                 </p>
+                <p className="mt-3 text-[15px] leading-relaxed text-gray-800">
+                  Il link nell&apos;email rimanda allo stesso indirizzo da cui hai inviato la registrazione: se eri su
+                  questo computer in sviluppo, vedrai <strong className="font-semibold">localhost</strong>; se ti sei
+                  registrato dal sito pubblico, vedrai il tuo dominio (es. Vercel). Apri il link sullo stesso ambiente,
+                  oppure registra di nuovo partendo dall&apos;URL che vuoi usare sempre.
+                </p>
               </>
             )}
             <CurtainLink
@@ -190,7 +198,31 @@ export default function RegisterPage() {
             </CurtainLink>
           </div>
         ) : (
-          <form
+          <div className="flex flex-col gap-8">
+            {cloudEnabled && supabase ? (
+              <div className="flex flex-col gap-4">
+                {oauthError ? (
+                  <p className="rounded-2xl border-[3px] border-red-800 bg-red-50 px-4 py-3 text-[15px] font-medium text-red-950" role="alert">
+                    {oauthError}
+                  </p>
+                ) : null}
+                <GoogleSignInButton
+                  supabase={supabase}
+                  disabled={submitting}
+                  variant="signup"
+                  onError={(m) => setOauthError(m)}
+                />
+                <div className="relative flex items-center gap-4" aria-hidden>
+                  <div className="h-[3px] flex-1 bg-[#d8d8d0]" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-600">
+                    oppure email e password
+                  </span>
+                  <div className="h-[3px] flex-1 bg-[#d8d8d0]" />
+                </div>
+              </div>
+            ) : null}
+
+            <form
             id={formId}
             onSubmit={(ev) => void handleSubmit(ev)}
             className="flex flex-col gap-6"
@@ -384,6 +416,7 @@ export default function RegisterPage() {
               </CurtainLink>
             </p>
           </form>
+          </div>
         )}
       </main>
     </div>

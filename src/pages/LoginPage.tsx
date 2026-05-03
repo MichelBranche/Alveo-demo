@@ -1,35 +1,73 @@
-import { type FormEvent, useId, useState } from 'react'
+import { type FormEvent, useCallback, useId, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { GoogleSignInButton } from '../components/GoogleSignInButton'
 import { CurtainLink } from '../components/NavigationTransition'
+import { useDiaryAuth } from '../context/DiaryAuthContext'
+import { signInDiaryCloud } from '../lib/diaryCloud'
 
 const inputClass =
   'mt-1.5 w-full rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-3 text-[15px] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] outline-none transition placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F4F0EA]'
 
+function messageFromSignInError(err: unknown): string {
+  const raw =
+    typeof err === 'object' && err && 'message' in err && typeof (err as Error).message === 'string'
+      ? ((err as Error).message || '').trim()
+      : ''
+
+  const lower = raw.toLowerCase()
+  if (lower.includes('invalid login') || lower.includes('invalid_grant') || raw.includes('Invalid login credentials')) {
+    return 'Email o password non corretti.'
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'Conferma prima l’indirizzo email dal messaggio ricevuto in registrazione.'
+  }
+  if (raw) return raw
+  return 'Accesso non riuscito. Riprova tra poco.'
+}
+
 export default function LoginPage() {
   const formId = useId()
+  const navigate = useNavigate()
+  const { cloudEnabled, supabase } = useDiaryAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(true)
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({})
-  const [showDemoNotice, setShowDemoNotice] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [oauthError, setOauthError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    const nextErrors: typeof fieldErrors = {}
-    const em = email.trim()
-    if (!em) nextErrors.email = 'Inserisci l’email con cui hai creato l’account.'
-    if (!password)
-      nextErrors.password = 'Inserisci la password.'
-    setFieldErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) {
-      setShowDemoNotice(false)
-      return
-    }
-    /* Invio reale (esempio):
-     * const res = await secureFetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, { ... })
-     * Mai registrare qui la password in chiaro nei log di produzione.
-     */
-    setShowDemoNotice(true)
-  }
+  const handleSubmit = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault()
+      setSubmitError(null)
+      const nextErrors: typeof fieldErrors = {}
+      const em = email.trim()
+      if (!em) nextErrors.email = 'Inserisci l’email con cui hai creato l’account.'
+      if (!password) nextErrors.password = 'Inserisci la password.'
+      setFieldErrors(nextErrors)
+      if (Object.keys(nextErrors).length > 0) return
+
+      if (!supabase || !cloudEnabled) {
+        setSubmitError(
+          'Supabase non è configurato. Imposta VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (vedi .env.example).',
+        )
+        return
+      }
+
+      setSubmitting(true)
+      try {
+        await signInDiaryCloud(supabase, em, password)
+        setPassword('')
+        navigate('/', { replace: true })
+      } catch (err) {
+        console.error(err)
+        setSubmitError(messageFromSignInError(err))
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [cloudEnabled, email, navigate, password, supabase],
+  )
 
   const emailErrId = `${formId}-email-err`
   const pwdErrId = `${formId}-password-err`
@@ -54,17 +92,59 @@ export default function LoginPage() {
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] md:justify-center md:py-12">
         <div className="rounded-3xl border-[3px] border-[#1A1A1A] bg-white p-6 shadow-[5px_5px_0px_#1A1A1A] md:p-10">
           <p className="font-['Space_Grotesk',sans-serif] text-xs font-bold uppercase tracking-[0.14em] text-gray-600">
-            Bentornato
+            Accesso
           </p>
           <h1 className="mt-2 font-['Space_Grotesk',sans-serif] text-3xl font-bold tracking-tight text-[#162327]">
-            Accesso
+            Entra nell&apos;app
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-gray-700">
-            Qui potrai entrare nell&apos;app con email e password. Il collegamento al servizio di autenticazione
-            arriverà quando il backend sarà attivo.
+            Puoi collegarti con Google oppure con email e password già registrate. Le credenziali vanno al servizio di
+            autenticazione su canale HTTPS, non sono memorizzate in questo schermo.
           </p>
 
-          <form id={formId} onSubmit={handleSubmit} className="mt-8 flex flex-col gap-6 text-left" noValidate>
+          {!cloudEnabled || !supabase ? (
+            <div
+              className="mt-6 rounded-2xl border-[3px] border-amber-800 bg-amber-50 px-4 py-3 text-[15px] leading-relaxed text-amber-950"
+              role="note"
+            >
+              Configurazione mancante: non troviamo <code className="text-sm">VITE_SUPABASE_URL</code> e/o{' '}
+              <code className="text-sm">VITE_SUPABASE_ANON_KEY</code>. Controlla <code className="text-sm">.env.local</code>{' '}
+              e riavvia il server locale.
+            </div>
+          ) : null}
+
+          {oauthError ? (
+            <p className="mt-4 rounded-2xl border-[3px] border-red-800 bg-red-50 px-4 py-3 text-[15px] font-medium text-red-950" role="alert">
+              {oauthError}
+            </p>
+          ) : null}
+
+          {cloudEnabled && supabase ? (
+            <div className="mt-6">
+              <GoogleSignInButton
+                supabase={supabase}
+                disabled={!cloudEnabled || submitting}
+                variant="signin"
+                onError={(m) => {
+                  setOauthError(m)
+                }}
+              />
+            </div>
+          ) : null}
+
+          <div className="relative my-8 flex items-center gap-4" aria-hidden>
+            <div className="h-[3px] flex-1 bg-[#eae5df]" />
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-600">oppure email</span>
+            <div className="h-[3px] flex-1 bg-[#eae5df]" />
+          </div>
+
+          <form id={formId} onSubmit={(ev) => void handleSubmit(ev)} className="flex flex-col gap-6 text-left" noValidate>
+            {submitError ? (
+              <p className="rounded-2xl border-[3px] border-red-800 bg-red-50 px-4 py-3 text-[15px] font-medium text-red-950" role="alert">
+                {submitError}
+              </p>
+            ) : null}
+
             <div>
               <label htmlFor={`${formId}-email`} className="text-sm font-bold text-[#1A1A1A]">
                 Email
@@ -79,6 +159,7 @@ export default function LoginPage() {
                 aria-describedby={fieldErrors.email ? emailErrId : undefined}
                 className={inputClass}
                 value={email}
+                disabled={submitting || !cloudEnabled}
                 onChange={(e) => {
                   setEmail(e.target.value)
                   if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }))
@@ -105,6 +186,7 @@ export default function LoginPage() {
                 aria-describedby={fieldErrors.password ? pwdErrId : undefined}
                 className={inputClass}
                 value={password}
+                disabled={submitting || !cloudEnabled}
                 onChange={(e) => {
                   setPassword(e.target.value)
                   if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }))
@@ -118,53 +200,24 @@ export default function LoginPage() {
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl text-sm font-medium text-gray-800 select-none [-webkit-tap-highlight-color:transparent] focus-within:outline focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-[#1A1A1A]">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="sr-only"
-                />
-                <span
-                  className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border-[3px] border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] transition-colors ${remember ? 'bg-[#d8cde6]' : 'bg-white'}`}
-                  aria-hidden
-                >
-                  {remember ? (
-                    <svg className="h-4 w-4 text-[#1A1A1A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : null}
-                </span>
-                <span className="min-w-0 leading-snug">
-                  Resta collegato · preferenza salvata in questa interfaccia quando ci sarà l&apos;account
-                </span>
-              </label>
+            <p className="text-sm text-gray-600">
               <button
                 type="button"
                 disabled
-                className="touch-manipulation whitespace-nowrap text-sm font-semibold text-gray-400 underline decoration-dotted underline-offset-2 hover:text-gray-600 sm:text-right sm:no-underline"
-                title="Disponibile con il recupero tramite backend"
+                className="cursor-not-allowed font-semibold text-gray-400 underline decoration-dotted underline-offset-2"
+                title="Prossimo passo: recupero tramite Supabase dalla stessa pagina"
               >
                 Password dimenticata?
-              </button>
-            </div>
-
-            {showDemoNotice ? (
-              <div
-                className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#eae5df] px-4 py-3 text-[15px] leading-relaxed text-gray-800"
-                role="status"
-              >
-                In questa demo non viene verificato l&apos;accesso: quando il backend sarà pronto, qui compariranno
-                successo ed eventuali messaggi dal server (senza mostrare dettagli sensibili in chiaro).
-              </div>
-            ) : null}
+              </button>{' '}
+              sarà disponibile a breve.
+            </p>
 
             <button
               type="submit"
-              className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-4 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#d8cde6] transition hover:bg-[#2a383f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#d8cde6]"
+              disabled={submitting || !cloudEnabled || !supabase}
+              className="rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-4 font-['Space_Grotesk',sans-serif] text-base font-bold text-white shadow-[4px_4px_0px_#d8cde6] transition hover:bg-[#2a383f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#d8cde6] disabled:opacity-50"
             >
-              Entra (demo)
+              {submitting ? 'Accesso in corso…' : 'Entra con email'}
             </button>
           </form>
 

@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useId, useState } from 'react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { useNavigate } from 'react-router-dom'
+import { GoogleSignInButton } from './GoogleSignInButton'
 import {
   signInDiaryCloud,
   signOutDiaryCloud,
@@ -102,7 +103,20 @@ export function CloudMemberAuthPanel({
           </button>
         </div>
       ) : (
-        <form className="mt-4 flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end" onSubmit={(e) => void onSignIn(e)}>
+        <>
+          <div className="mt-4">
+            <GoogleSignInButton
+              supabase={sb}
+              variant="signin"
+              onError={(m) => onToast(m)}
+            />
+          </div>
+          <div className="relative my-5 flex items-center gap-3" aria-hidden>
+            <div className="h-0.5 flex-1 bg-[#eae5df]" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">oppure email</span>
+            <div className="h-0.5 flex-1 bg-[#eae5df]" />
+          </div>
+        <form className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end" onSubmit={(e) => void onSignIn(e)}>
           <div className="min-w-0 flex-1 md:min-w-[200px]">
             <label htmlFor={emailId} className="text-xs font-bold text-[#1A1A1A]">
               Email
@@ -150,6 +164,7 @@ export function CloudMemberAuthPanel({
             </button>
           </div>
         </form>
+        </>
       )}
     </section>
   )

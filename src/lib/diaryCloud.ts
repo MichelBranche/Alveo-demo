@@ -155,6 +155,34 @@ export async function signInDiaryCloud(sb: SupabaseClient, email: string, passwo
   return data.session
 }
 
+/** Dove tornare dopo email OAuth / magic link; va elencato in Supabase Authentication → Redirect URLs. */
+export function authAppRedirectUrl(): string | undefined {
+  try {
+    if (typeof window === 'undefined') return undefined
+    const origin = window.location.origin?.replace(/\/$/, '')
+    if (!origin || origin === 'null') return undefined
+    return `${origin}/`
+  } catch {
+    return undefined
+  }
+}
+
+/** Avvia Sign in with Google (redirect browser verso Google e poi all’app). */
+export async function signInWithGoogleOAuth(sb: SupabaseClient): Promise<void> {
+  const redirectTo = authAppRedirectUrl()
+  const { data, error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: redirectTo ? { redirectTo } : {},
+  })
+  if (error) throw error
+  const url = data.url
+  if (url && typeof window !== 'undefined') {
+    window.location.assign(url)
+    return
+  }
+  throw new Error('Accesso con Google non avviato: URL mancante.')
+}
+
 export async function signUpDiaryCloud(
   sb: SupabaseClient,
   email: string,
@@ -162,16 +190,14 @@ export async function signUpDiaryCloud(
   profile?: { displayName?: string },
 ) {
   const name = profile?.displayName?.trim()
+  const redirectTo = authAppRedirectUrl()
   const { data, error } = await sb.auth.signUp({
     email: email.trim(),
     password,
-    ...(name
-      ? {
-          options: {
-            data: { display_name: name, full_name: name },
-          },
-        }
-      : {}),
+    options: {
+      ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+      ...(name ? { data: { display_name: name, full_name: name } } : {}),
+    },
   })
   if (error) throw error
   return data.session as Session | null
