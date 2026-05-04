@@ -13,6 +13,7 @@ import {
   SAVED_CHAPTERS_CHANGED,
   type SavedAudiobookChapter,
 } from '../lib/savedAudiobookChapters'
+import { CurtainLink } from '../components/NavigationTransition'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
 import { OASIS_MOOD_SYNC_EVENT, scheduleUserAppProfilePush } from '../lib/userAppPreferencesCloud'
 import type { NavId } from '../nav'
@@ -198,12 +199,15 @@ export default function PersonalOasisPage({ onSelectNav }: { onSelectNav: (id: N
             🏠
           </span>
           <h1 className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">Area personale</h1>
-          <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-gray-700">
-            Per accedere servono progetto Supabase e variabili{' '}
-            <code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_URL</code>,{' '}
-            <code className="rounded bg-white px-1 text-xs">VITE_SUPABASE_ANON_KEY</code> nel file locale e negli ambienti di hosting
-            (vedi <code className="rounded bg-white px-1 text-xs">.env.example</code>). Poi crea account o accedi dalla home.
+          <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-gray-700">
+            Questa sezione non è al momento disponibile. Puoi continuare a usare il resto dell&apos;app dalla home.
           </p>
+          <CurtainLink
+            to="/"
+            className="mx-auto mt-6 inline-flex rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-8 py-3 font-['Space_Grotesk',sans-serif] text-sm font-bold text-white shadow-[3px_3px_0px_#f9e784] transition hover:bg-[#2a383f]"
+          >
+            Torna alla home
+          </CurtainLink>
         </div>
       </div>
     )

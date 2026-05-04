@@ -64,7 +64,7 @@ export default function CommunityEventsHomeSection({ onSelectNav }: { onSelectNa
       </h2>
       <p className="mt-3 max-w-2xl text-[15px] font-medium leading-relaxed text-[#374550] md:text-base">
         <span className="font-['Space_Grotesk',sans-serif] text-[1.05rem] font-bold italic text-[#162327] md:text-lg">
-          «Tra simili ci capisce, fatti sentire!»
+          «Tra simili ci si capisce, fatti sentire!»
         </span>{' '}
         Qui trovi i prossimi appuntamenti organizzati dalla community: incontri online, gruppi di ascolto, laboratori.
         Controlla data, luogo o link; in Community puoi proporre idee e restare aggiornato.

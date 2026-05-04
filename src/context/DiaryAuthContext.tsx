@@ -44,18 +44,38 @@ export function DiaryAuthProvider({ children }: { children: ReactNode }) {
 
     let alive = true
 
+    const finishSession = (next: Session | null) => {
+      if (!alive) return
+      setSession(next)
+      setInitializing(false)
+    }
+
     if (DEV_BYPASS_AUTH_GATES) {
       setInitializing(false)
-      void supabase.auth.getSession().then(({ data }) => {
-        if (!alive) return
-        setSession(data.session ?? null)
-      })
+      void supabase.auth
+        .getSession()
+        .then(({ data, error }) => {
+          if (!alive) return
+          if (error) console.warn('[Alveo auth] getSession:', error.message)
+          setSession(data.session ?? null)
+        })
+        .catch((e) => {
+          console.error('[Alveo auth] getSession', e)
+          if (!alive) return
+          setSession(null)
+        })
     } else {
-      void supabase.auth.getSession().then(({ data }) => {
-        if (!alive) return
-        setSession(data.session ?? null)
-        setInitializing(false)
-      })
+      void supabase.auth
+        .getSession()
+        .then(({ data, error }) => {
+          if (!alive) return
+          if (error) console.warn('[Alveo auth] getSession:', error.message)
+          finishSession(data.session ?? null)
+        })
+        .catch((e) => {
+          console.error('[Alveo auth] getSession', e)
+          finishSession(null)
+        })
     }
 
     const {

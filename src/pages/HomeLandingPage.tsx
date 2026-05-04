@@ -14,7 +14,7 @@ export default function HomeLandingPage({
   onEnterOasis: () => void
   onSelectNav: (id: NavId) => void
 }) {
-  const { canUseOasis } = useDiaryAuth()
+  const { canUseOasis, cloudEnabled } = useDiaryAuth()
 
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-10 pb-14 md:gap-14 md:pb-16">
@@ -60,6 +60,15 @@ export default function HomeLandingPage({
             >
               Apri le meditazioni
             </button>
+            {cloudEnabled ?
+              <button
+                type="button"
+                onClick={() => onSelectNav('community')}
+                className="w-full rounded-2xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] px-4 py-4 text-center font-['Space_Grotesk',sans-serif] text-sm font-bold text-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_#1A1A1A] active:translate-x-[1px] active:translate-y-[1px] sm:w-auto sm:px-8 sm:text-base"
+              >
+                Apri la Community
+              </button>
+            : null}
           </div>
         </div>
       </section>

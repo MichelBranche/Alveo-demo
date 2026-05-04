@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import CommunityGifPicker from '../components/CommunityGifPicker'
 import { useDiaryAuth } from '../context/DiaryAuthContext'
 import { getDiarySupabase } from '../lib/diaryCloud'
+import { buildCommunityGifBody, parseCommunityGifUrl } from '../lib/communityGif'
 import {
   acceptFriendRequestRpc,
   COMMUNITY_DM_BODY_MAX,
@@ -37,6 +39,23 @@ import {
 } from '../lib/communityCloud'
 import type { NavId } from '../nav'
 
+function CommunityMessageBody({ body, mine }: { body: string; mine: boolean }) {
+  const gifUrl = parseCommunityGifUrl(body)
+  if (gifUrl) {
+    return (
+      <div className="max-w-[min(260px,78vw)]">
+        <img
+          src={gifUrl}
+          alt={mine ? 'La tua GIF' : 'GIF inviata'}
+          className="max-h-52 w-full rounded-xl object-contain"
+          loading="lazy"
+        />
+      </div>
+    )
+  }
+  return <p className="whitespace-pre-wrap break-words">{body}</p>
+}
+
 function tabBtn(active: boolean, children: ReactNode, onClick: () => void) {
   return (
     <button
@@ -59,6 +78,8 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const uid = session?.user?.id ?? null
 
   const [tab, setTab] = useState<'chat' | 'friends' | 'profile'>('chat')
+  /** Vista raccolta vs schermata modifica profilo (solo tab Profilo). */
+  const [profileEditing, setProfileEditing] = useState(false)
   const [globalMessages, setGlobalMessages] = useState<GlobalMessageRow[]>([])
   const [profileMap, setProfileMap] = useState<Map<string, CommunityProfile>>(new Map())
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
@@ -83,6 +104,9 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const [dmLoadingOlder, setDmLoadingOlder] = useState(false)
   const [dmHasMore, setDmHasMore] = useState(true)
   const [draftDm, setDraftDm] = useState('')
+  const [gifPickerOpen, setGifPickerOpen] = useState(false)
+  const [gifTarget, setGifTarget] = useState<'global' | 'dm'>('global')
+  const [gifPickerNonce, setGifPickerNonce] = useState(0)
 
   const globalListRef = useRef<HTMLDivElement>(null)
   const preserveGlobalScrollRef = useRef<{ h: number; t: number } | null>(null)
@@ -343,9 +367,13 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   }, [sb, uid])
 
   useEffect(() => {
-    if (!sb || !uid || !canUseDiary || tab !== 'friends') return
+    if (!sb || !uid || !canUseDiary || (tab !== 'friends' && tab !== 'profile')) return
     void reloadFriends()
   }, [sb, uid, canUseDiary, tab, reloadFriends])
+
+  useEffect(() => {
+    if (tab !== 'profile') setProfileEditing(false)
+  }, [tab])
 
   useEffect(() => {
     if (!sb || !uid || !dmPeer || !canUseDiary) {
@@ -460,6 +488,14 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     [sb, reloadFriends],
   )
 
+  const closeProfileEdit = useCallback(() => {
+    setProfileEditing(false)
+    if (myProfile) {
+      setProfileNameDraft(myProfile.display_name)
+      setProfileAvatarDraft(myProfile.avatar_url ?? '')
+    }
+  }, [myProfile])
+
   const onSaveProfile = useCallback(async () => {
     if (!sb || !uid) return
     setProfileSaving(true)
@@ -471,6 +507,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
       const p = await fetchMyCommunityProfile(sb, uid)
       setMyProfile(p)
       if (p) mergeProfile(p)
+      setProfileEditing(false)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Salvataggio non riuscito')
     } finally {
@@ -490,6 +527,54 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
       alert(e instanceof Error ? e.message : 'Messaggio non inviato (serve amicizia accettata).')
     }
   }, [sb, uid, dmPeer, draftDm])
+
+  const openGifPicker = useCallback((target: 'global' | 'dm') => {
+    setGifTarget(target)
+    setGifPickerNonce((n) => n + 1)
+    setGifPickerOpen(true)
+  }, [])
+
+  const onGifPicked = useCallback(
+    async (url: string) => {
+      if (!sb || !uid) return
+      const max = gifTarget === 'global' ? COMMUNITY_GLOBAL_BODY_MAX : COMMUNITY_DM_BODY_MAX
+      const body = buildCommunityGifBody(url, max)
+      if (!body) {
+        alert('URL GIF non consentito: usa un link HTTPS da Giphy o Tenor (file .gif).')
+        return
+      }
+      setGifPickerOpen(false)
+      try {
+        if (gifTarget === 'global') {
+          scrollGlobalBottomRef.current = true
+          await sendGlobalMessage(sb, uid, body)
+        } else {
+          if (!dmPeer) return
+          scrollDmBottomRef.current = true
+          await sendDirectMessage(sb, uid, dmPeer.user_id, body)
+        }
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Invio GIF non riuscito')
+      }
+    },
+    [sb, uid, gifTarget, dmPeer],
+  )
+
+  const incomingPendingCount = useMemo(
+    () => (uid ? requests.filter((r) => r.to_user === uid && r.status === 'pending').length : 0),
+    [requests, uid],
+  )
+
+  const browseProfileHandle = useMemo(() => {
+    const raw = (myProfile?.display_name || 'utente').trim() || 'utente'
+    return raw
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9._]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 28)
+  }, [myProfile?.display_name])
 
   if (!cloudEnabled) {
     return (
@@ -522,29 +607,58 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     )
   }
 
-  return (
-    <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-[max(3rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] sm:gap-6 md:gap-8 md:pb-10">
-      <header className="rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-[#faf8f5] to-[#fef6d8] p-4 shadow-[5px_5px_0px_#1A1A1A] sm:rounded-3xl sm:p-6 md:p-8">
-        <p className="mb-2 inline-flex rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
-          Community
-        </p>
-        <h1 className="font-['Space_Grotesk',sans-serif] text-xl font-bold tracking-tight text-[#162327] sm:text-2xl md:text-3xl">
-          Tra simili ci capisce, fatti sentire!
-        </h1>
-        <p className="mt-3 max-w-xl text-[15px] font-medium leading-relaxed text-[#374550]">
-          Uno spazio sobrio per scambiare due parole in chat globale, conoscere altre persone che usano Alveo e, con
-          amicizia accettata, scriversi in privato. Rispetto e confini: niente spam, niente molestie.
-        </p>
-        <p className="mt-4 text-sm font-semibold text-[#2d3f46]">
-          Online negli ultimi ~90 secondi:{' '}
-          <span className="tabular-nums">{onlineCount == null ? '—' : onlineCount}</span>
-        </p>
-      </header>
+  const profileTab = tab === 'profile'
 
-      <div className="grid w-full min-w-0 grid-cols-3 gap-1.5 sm:gap-2" role="tablist" aria-label="Sezioni community">
+  return (
+    <>
+      {gifPickerOpen ?
+        <CommunityGifPicker key={gifPickerNonce} open onClose={() => setGifPickerOpen(false)} onPick={onGifPicked} />
+      : null}
+      <div
+        className={
+          profileTab ?
+            'mx-auto flex w-full min-w-0 max-w-none flex-col gap-0 pb-[max(2rem,calc(0.75rem+env(safe-area-inset-bottom,0px)))] -mx-4 w-[calc(100%+2rem)] sm:-mx-6 sm:w-[calc(100%+3rem)] md:-mx-8 md:w-[calc(100%+4rem)]'
+          : 'mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-[max(3rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] sm:gap-6 md:gap-8 md:pb-10'
+        }
+      >
+        {!profileTab ?
+          <header className="rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-[#faf8f5] to-[#fef6d8] p-4 shadow-[5px_5px_0px_#1A1A1A] sm:rounded-3xl sm:p-6 md:p-8">
+            <p className="mb-2 inline-flex rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
+              Community
+            </p>
+            <h1 className="font-['Space_Grotesk',sans-serif] text-xl font-bold tracking-tight text-[#162327] sm:text-2xl md:text-3xl">
+              Tra simili ci si capisce, fatti sentire!
+            </h1>
+            <p className="mt-3 max-w-xl text-[15px] font-medium leading-relaxed text-[#374550]">
+              Uno spazio sobrio per scambiare due parole in chat globale, conoscere altre persone che usano Alveo e, con
+              amicizia accettata, scriversi in privato. Rispetto e confini: niente spam, niente molestie.
+            </p>
+            <p className="mt-4 text-sm font-semibold text-[#2d3f46]">
+              Online negli ultimi ~90 secondi:{' '}
+              <span className="tabular-nums">{onlineCount == null ? '—' : onlineCount}</span>
+            </p>
+          </header>
+        : null}
+
+        <div
+          className={
+            profileTab ?
+              'sticky top-0 z-30 grid w-full min-w-0 grid-cols-3 gap-1.5 border-b-2 border-[#1A1A1A]/12 bg-[#faf8f5]/95 px-0 py-2 backdrop-blur-md sm:gap-2'
+            : 'grid w-full min-w-0 grid-cols-3 gap-1.5 sm:gap-2'
+          }
+          role="tablist"
+          aria-label="Sezioni community"
+        >
         {tabBtn(tab === 'chat', 'Chat globale', () => setTab('chat'))}
         {tabBtn(tab === 'friends', 'Amici e messaggi', () => setTab('friends'))}
-        {tabBtn(tab === 'profile', 'Il tuo profilo', () => setTab('profile'))}
+        {tabBtn(
+          tab === 'profile',
+          'Il tuo profilo',
+          () => {
+            if (tab === 'profile' && profileEditing) closeProfileEdit()
+            else setTab('profile')
+          },
+        )}
       </div>
 
       {tab === 'chat' ?
@@ -600,7 +714,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                       : 'max-w-[min(85%,calc(100%-0.5rem))] rounded-2xl border-2 border-[#1A1A1A]/25 bg-[#f4f0ea] px-3 py-2 text-[14px] text-[#1A1A1A]'
                     }
                   >
-                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                    <CommunityMessageBody body={m.body} mine={mine} />
                     <p className={`mt-1 text-[10px] ${mine ? 'text-white/70' : 'text-gray-500'}`}>
                       {new Date(m.created_at).toLocaleString('it-IT', {
                         day: '2-digit',
@@ -624,14 +738,23 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                 placeholder="Scrivi qualcosa alla community…"
                 className="min-h-[3rem] flex-1 resize-none rounded-xl border-2 border-[#1A1A1A] bg-[#faf8f5] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#1A1A1A]/30"
               />
-              <button
-                type="button"
-                onClick={() => void onSendGlobal()}
-                className="shrink-0 rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] px-5 py-2.5 text-sm font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-50"
-                disabled={!sanitizeCommunityBody(draftGlobal, COMMUNITY_GLOBAL_BODY_MAX)}
-              >
-                Invia
-              </button>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => openGifPicker('global')}
+                  className="rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-2.5 text-sm font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A] transition hover:bg-[#f4f0ea]"
+                >
+                  GIF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onSendGlobal()}
+                  className="rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] px-5 py-2.5 text-sm font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-50"
+                  disabled={!sanitizeCommunityBody(draftGlobal, COMMUNITY_GLOBAL_BODY_MAX)}
+                >
+                  Invia
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -769,7 +892,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                           : 'max-w-[88%] rounded-xl border border-[#1A1A1A]/20 bg-white px-2.5 py-1.5 text-sm'
                         }
                       >
-                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                        <CommunityMessageBody body={m.body} mine={mine} />
                       </div>
                     </div>
                   )
@@ -786,14 +909,24 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                 placeholder={dmPeer ? 'Messaggio privato…' : 'Scegli un amico'}
                 className="mb-2 w-full resize-none rounded-xl border-2 border-[#1A1A1A] bg-white px-3 py-2 text-sm disabled:opacity-50"
               />
-              <button
-                type="button"
-                disabled={!dmPeer || !sanitizeCommunityBody(draftDm, COMMUNITY_DM_BODY_MAX)}
-                onClick={() => void onSendDm()}
-                className="w-full rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
-              >
-                Invia messaggio
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={!dmPeer}
+                  onClick={() => openGifPicker('dm')}
+                  className="shrink-0 rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
+                >
+                  GIF
+                </button>
+                <button
+                  type="button"
+                  disabled={!dmPeer || !sanitizeCommunityBody(draftDm, COMMUNITY_DM_BODY_MAX)}
+                  onClick={() => void onSendDm()}
+                  className="min-w-0 flex-1 rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
+                >
+                  Invia messaggio
+                </button>
+              </div>
             </div>
           </div>
 
@@ -834,50 +967,121 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
             </ul>
           </div>
         </section>
-      : <section className="rounded-3xl border-[3px] border-[#1A1A1A] bg-white p-6 shadow-[5px_5px_0px_#1A1A1A]">
-          <h2 className="font-['Space_Grotesk',sans-serif] text-xl font-bold text-[#162327]">Profilo community</h2>
-          {myProfile?.avatar_url ?
-            <div className="mt-3 flex items-center gap-3">
-              <img
-                src={profileAvatarDraft.trim() || myProfile.avatar_url}
-                alt=""
-                className="h-16 w-16 rounded-full border-2 border-[#1A1A1A] object-cover"
+      : profileEditing ?
+        <div className="flex min-h-[min(calc(100dvh-6rem),56rem)] w-full flex-col bg-[#faf8f5] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 sm:px-6 sm:pt-4">
+          <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
+            <header className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b-2 border-[#1A1A1A]/12 pb-5">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-['Space_Grotesk',sans-serif] text-xl font-bold text-[#162327] sm:text-2xl">
+                  Modifica profilo
+                </h2>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-[#374550]">
+                  Per la foto incolla l&apos;URL di un&apos;immagine HTTPS già online; in seguito potrai caricare un file.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeProfileEdit}
+                className="shrink-0 rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-2 text-sm font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A] transition hover:bg-[#f4f0ea]"
+              >
+                Chiudi
+              </button>
+            </header>
+            <label className="block text-sm font-bold text-[#162327]">
+              Nome visibile
+              <input
+                value={profileNameDraft}
+                onChange={(e) => setProfileNameDraft(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded-xl border-2 border-[#1A1A1A] px-3 py-2.5 text-sm"
               />
-              <p className="text-sm text-gray-600">Anteprima foto (salva per applicare un nuovo URL).</p>
+            </label>
+            <label className="mt-4 block text-sm font-bold text-[#162327]">
+              URL foto profilo (opzionale)
+              <input
+                value={profileAvatarDraft}
+                onChange={(e) => setProfileAvatarDraft(e.target.value)}
+                className="mt-1 w-full rounded-xl border-2 border-[#1A1A1A] px-3 py-2.5 text-sm"
+                placeholder="https://…"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={profileSaving}
+              onClick={() => void onSaveProfile()}
+              className="mt-10 w-full rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-3.5 text-sm font-bold text-white shadow-[4px_4px_0px_#f9e784] disabled:opacity-50"
+            >
+              {profileSaving ? 'Salvataggio…' : 'Salva profilo'}
+            </button>
+          </div>
+        </div>
+      : (
+          <div className="flex min-h-[min(100dvh,56rem)] flex-col bg-[#faf8f5]">
+            <div
+              className="relative h-40 shrink-0 bg-gradient-to-br from-[#c9dce6] via-[#e8e0f0] to-[#fef6d8] sm:h-48"
+              aria-hidden
+            />
+            <div className="relative -mt-[4.5rem] flex flex-1 flex-col px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:-mt-[5rem] sm:px-6">
+              <div className="mx-auto flex w-full max-w-md flex-col items-center text-center">
+                <div className="flex h-[7.25rem] w-[7.25rem] shrink-0 items-center justify-center overflow-hidden rounded-full border-[4px] border-white bg-[#eae5df] font-['Space_Grotesk',sans-serif] text-4xl font-bold text-[#162327] shadow-[0_6px_0_#1A1A1A] ring-2 ring-[#1A1A1A]/10">
+                  {myProfile?.avatar_url ?
+                    <img src={myProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                  : (
+                    (myProfile?.display_name || '?').slice(0, 1).toUpperCase()
+                  )}
+                </div>
+                <h2 className="mt-4 font-['Space_Grotesk',sans-serif] text-2xl font-bold tracking-tight text-[#162327] sm:text-[1.75rem]">
+                  {myProfile?.display_name || 'Profilo'}
+                </h2>
+                <p className="mt-1 text-sm font-medium text-[#5c6b72]">@{browseProfileHandle}</p>
+                <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-[#374550]">
+                  Questo è come ti presenti in community. Nome e immagine compaiono in chat e nei messaggi.
+                </p>
+
+                <div className="mt-6 grid w-full max-w-sm grid-cols-3 divide-x divide-[#1A1A1A]/12 border-y border-[#1A1A1A]/12 py-4">
+                  <div>
+                    <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
+                      {friendships.length}
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Amici</p>
+                  </div>
+                  <div>
+                    <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
+                      {incomingPendingCount}
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">In attesa</p>
+                  </div>
+                  <div>
+                    <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">◆</p>
+                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Alveo</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setProfileEditing(true)}
+                  className="mt-8 w-full max-w-sm rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-6 py-3.5 font-['Space_Grotesk',sans-serif] text-sm font-bold text-white shadow-[4px_4px_0px_#f9e784] transition hover:bg-[#2a383f] active:translate-x-px active:translate-y-px active:shadow-[2px_2px_0px_#f9e784]"
+                >
+                  Modifica profilo
+                </button>
+              </div>
+
+              <div className="mx-auto mt-8 grid w-full max-w-md grid-cols-3 gap-1 sm:mt-10 sm:gap-1.5" aria-hidden>
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="aspect-square rounded-lg border-2 border-dashed border-[#1A1A1A]/12 bg-[#f4f0ea]/60"
+                  />
+                ))}
+              </div>
+              <p className="mx-auto mt-2 max-w-md text-center text-[11px] font-medium text-[#8a959b]">
+                Griglia stile raccolta (contenuti personali in arrivo).
+              </p>
             </div>
-          : null}
-          <p className="mt-2 text-sm text-gray-600">
-            Nome visibile in chat e messaggi. Per la foto puoi incollare l&apos;URL di un&apos;immagine (HTTPS) già
-            ospitata online; in seguito si potrà caricare un file da qui.
-          </p>
-          <label className="mt-4 block text-sm font-bold text-[#162327]">
-            Nome visibile
-            <input
-              value={profileNameDraft}
-              onChange={(e) => setProfileNameDraft(e.target.value)}
-              maxLength={80}
-              className="mt-1 w-full rounded-xl border-2 border-[#1A1A1A] px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="mt-4 block text-sm font-bold text-[#162327]">
-            URL foto profilo (opzionale)
-            <input
-              value={profileAvatarDraft}
-              onChange={(e) => setProfileAvatarDraft(e.target.value)}
-              className="mt-1 w-full rounded-xl border-2 border-[#1A1A1A] px-3 py-2 text-sm"
-              placeholder="https://…"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={profileSaving}
-            onClick={() => void onSaveProfile()}
-            className="mt-6 rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] px-6 py-3 text-sm font-bold text-white shadow-[3px_3px_0px_#f9e784] disabled:opacity-50"
-          >
-            {profileSaving ? 'Salvataggio…' : 'Salva profilo'}
-          </button>
-        </section>
+          </div>
+        )
       }
-    </div>
+      </div>
+    </>
   )
 }

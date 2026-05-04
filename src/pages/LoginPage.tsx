@@ -107,9 +107,12 @@ export default function LoginPage() {
               className="mt-6 rounded-2xl border-[3px] border-amber-800 bg-amber-50 px-4 py-3 text-[15px] leading-relaxed text-amber-950"
               role="note"
             >
-              Configurazione mancante: non troviamo <code className="text-sm">VITE_SUPABASE_URL</code> e/o{' '}
-              <code className="text-sm">VITE_SUPABASE_ANON_KEY</code>. Controlla <code className="text-sm">.env.local</code>{' '}
-              e riavvia il server locale.
+              <strong className="font-bold">Accesso disattivato:</strong> servono{' '}
+              <code className="text-sm">VITE_SUPABASE_URL</code> e <code className="text-sm">VITE_SUPABASE_ANON_KEY</code>{' '}
+              (stesso progetto Supabase dell&apos;app). In locale usa <code className="text-sm">.env.local</code> e riavvia{' '}
+              <code className="text-sm">npm run dev</code>. Su <strong>Vercel</strong> vanno aggiunte in Project → Settings
+              → Environment Variables per <strong>Production</strong> (e Preview se serve), poi un <strong>nuovo deploy</strong>:
+              le variabili <code className="text-sm">VITE_*</code> sono lette in fase di build.
             </div>
           ) : null}
 
