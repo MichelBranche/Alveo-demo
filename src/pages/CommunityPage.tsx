@@ -17,8 +17,12 @@ import {
   fetchDirectMessages,
   fetchGlobalMessages,
   fetchMyCommunityProfile,
+  addCommunityProfilePhoto,
+  deleteCommunityProfilePhoto,
+  listCommunityProfilePhotos,
   listFriendRequests,
   listFriendships,
+  listFriendshipsInvolvingUser,
   otherFriendId,
   rejectFriendRequest,
   sanitizeCommunityBody,
@@ -32,6 +36,7 @@ import {
   touchCommunityOnline,
   upsertCommunityProfile,
   type CommunityProfile,
+  type CommunityProfilePhotoRow,
   type DirectMessageRow,
   type FriendRequestRow,
   type FriendshipRow,
@@ -56,6 +61,24 @@ function CommunityMessageBody({ body, mine }: { body: string; mine: boolean }) {
   return <p className="whitespace-pre-wrap break-words">{body}</p>
 }
 
+function dmBodySnippet(body: string, max = 44): string {
+  const gif = parseCommunityGifUrl(body)
+  if (gif) return 'GIF'
+  const t = body.replace(/\s+/g, ' ').trim()
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`
+}
+
+function communityHandleFromDisplayName(displayName: string): string {
+  const raw = displayName.trim() || 'utente'
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9._]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 28)
+}
+
 function tabBtn(active: boolean, children: ReactNode, onClick: () => void) {
   return (
     <button
@@ -72,6 +95,123 @@ function tabBtn(active: boolean, children: ReactNode, onClick: () => void) {
   )
 }
 
+function ProfileFriendsAndGallery({
+  friends,
+  photos,
+  loading,
+  isOwn,
+  onOpenProfile,
+  newPhotoUrl,
+  onNewPhotoUrlChange,
+  onPublishPhoto,
+  onDeletePhoto,
+  mutating,
+}: {
+  friends: CommunityProfile[]
+  photos: CommunityProfilePhotoRow[]
+  loading: boolean
+  isOwn: boolean
+  onOpenProfile: (userId: string) => void
+  newPhotoUrl: string
+  onNewPhotoUrlChange: (v: string) => void
+  onPublishPhoto: () => void
+  onDeletePhoto: (photoId: string) => void
+  mutating: boolean
+}) {
+  const emptyPhotosLabel = isOwn ?
+    'Non hai ancora pubblicato nulla.'
+  : 'Questo account non ha ancora pubblicato nulla.'
+  const emptyFriendsLabel = isOwn ?
+    'Non hai ancora amici in community.'
+  : 'Nessun amico da mostrare.'
+
+  return (
+    <>
+      <section className="mt-8 w-full max-w-md text-left">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#5c6b72]">Amici</h3>
+        {loading ?
+          <p className="mt-2 text-sm text-gray-500">Caricamento…</p>
+        : friends.length === 0 ?
+          <p className="mt-2 text-sm text-gray-600">{emptyFriendsLabel}</p>
+        : (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {friends.map((f) => (
+              <li key={f.user_id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenProfile(f.user_id)}
+                  className="flex flex-col items-center gap-1 rounded-xl border-2 border-transparent p-1 transition hover:border-[#1A1A1A]/25 hover:bg-white/80"
+                >
+                  <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-[#1A1A1A] bg-[#eae5df] text-sm font-bold text-[#162327]">
+                    {f.avatar_url ?
+                      <img src={f.avatar_url} alt="" className="h-full w-full object-cover" />
+                    : (f.display_name || '?').slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate text-center text-[10px] font-semibold text-[#374550]">
+                    {f.display_name}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-8 w-full max-w-md text-left">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#5c6b72]">Foto pubblicate</h3>
+        {isOwn ?
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            <input
+              value={newPhotoUrl}
+              onChange={(e) => onNewPhotoUrlChange(e.target.value)}
+              className="min-w-0 flex-1 rounded-xl border-2 border-[#1A1A1A]/30 bg-white px-3 py-2 text-sm"
+              placeholder="URL immagine HTTPS…"
+              maxLength={2048}
+            />
+            <button
+              type="button"
+              disabled={mutating || !newPhotoUrl.trim().startsWith('https://')}
+              onClick={() => onPublishPhoto()}
+              className="shrink-0 rounded-xl border-[3px] border-[#1A1A1A] bg-[#f9e784] px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
+            >
+              {mutating ? '…' : 'Pubblica'}
+            </button>
+          </div>
+        : null}
+        {loading ?
+          <p className="mt-3 text-sm text-gray-500">Caricamento…</p>
+        : photos.length === 0 ?
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">{emptyPhotosLabel}</p>
+        : (
+          <ul className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
+            {photos.map((ph) => (
+              <li key={ph.id} className="group relative aspect-square overflow-hidden rounded-lg border-2 border-[#1A1A1A]/15 bg-[#f4f0ea]">
+                <img
+                  src={ph.image_url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+                {isOwn ?
+                  <button
+                    type="button"
+                    aria-label="Rimuovi foto"
+                    disabled={mutating}
+                    onClick={() => onDeletePhoto(ph.id)}
+                    className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#1A1A1A] bg-white/95 text-sm font-bold text-[#162327] opacity-0 shadow-sm transition hover:bg-[#fde8e8] group-hover:opacity-100 disabled:opacity-40 sm:opacity-100"
+                  >
+                    ×
+                  </button>
+                : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
+  )
+}
+
 export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId) => void }) {
   const { cloudEnabled, session, initializing, canUseDiary } = useDiaryAuth()
   const sb = useMemo(() => getDiarySupabase(), [])
@@ -80,6 +220,8 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const [tab, setTab] = useState<'chat' | 'friends' | 'profile'>('chat')
   /** Vista raccolta vs schermata modifica profilo (solo tab Profilo). */
   const [profileEditing, setProfileEditing] = useState(false)
+  /** In tab Profilo: `null` = il tuo profilo; altrimenti id utente da mostrare (sola lettura). */
+  const [viewingProfileUserId, setViewingProfileUserId] = useState<string | null>(null)
   const [globalMessages, setGlobalMessages] = useState<GlobalMessageRow[]>([])
   const [profileMap, setProfileMap] = useState<Map<string, CommunityProfile>>(new Map())
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
@@ -107,6 +249,15 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
   const [gifPickerOpen, setGifPickerOpen] = useState(false)
   const [gifTarget, setGifTarget] = useState<'global' | 'dm'>('global')
   const [gifPickerNonce, setGifPickerNonce] = useState(0)
+  const [friendFilter, setFriendFilter] = useState('')
+  const [friendsMobileThread, setFriendsMobileThread] = useState(false)
+  const [dmPreviewByPeer, setDmPreviewByPeer] = useState<Map<string, string>>(() => new Map())
+  const [findPeopleOpen, setFindPeopleOpen] = useState(false)
+  const [profileGalleryPhotos, setProfileGalleryPhotos] = useState<CommunityProfilePhotoRow[]>([])
+  const [profileGalleryFriends, setProfileGalleryFriends] = useState<CommunityProfile[]>([])
+  const [profileGalleryLoading, setProfileGalleryLoading] = useState(false)
+  const [newProfilePhotoUrl, setNewProfilePhotoUrl] = useState('')
+  const [galleryMutating, setGalleryMutating] = useState(false)
 
   const globalListRef = useRef<HTMLDivElement>(null)
   const preserveGlobalScrollRef = useRef<{ h: number; t: number } | null>(null)
@@ -366,10 +517,50 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     }
   }, [sb, uid])
 
+  const openDmWithFriend = useCallback(
+    (oid: string) => {
+      const pr = profileMap.get(oid)
+      setDmPeer(
+        pr ?? {
+          user_id: oid,
+          display_name: 'Utente',
+          avatar_url: null,
+          updated_at: new Date().toISOString(),
+        },
+      )
+      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+        setFriendsMobileThread(true)
+      }
+      if (!sb) return
+      void fetchCommunityProfiles(sb, [oid]).then((m) => {
+        const p = m.get(oid)
+        if (p) setDmPeer(p)
+      })
+    },
+    [sb, profileMap],
+  )
+
   useEffect(() => {
     if (!sb || !uid || !canUseDiary || (tab !== 'friends' && tab !== 'profile')) return
     void reloadFriends()
   }, [sb, uid, canUseDiary, tab, reloadFriends])
+
+  useEffect(() => {
+    if (tab !== 'friends') setFriendsMobileThread(false)
+  }, [tab])
+
+  useEffect(() => {
+    if (!dmPeer || dmRows.length === 0 || !uid) return
+    const last = dmRows[dmRows.length - 1]
+    const base = dmBodySnippet(last.body, 40)
+    const snippet = last.sender_id === uid ? `Tu: ${base}` : base
+    setDmPreviewByPeer((prev) => {
+      if (prev.get(dmPeer.user_id) === snippet) return prev
+      const next = new Map(prev)
+      next.set(dmPeer.user_id, snippet)
+      return next
+    })
+  }, [dmPeer, dmRows, uid])
 
   useEffect(() => {
     if (tab !== 'profile') setProfileEditing(false)
@@ -565,16 +756,121 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     [requests, uid],
   )
 
-  const browseProfileHandle = useMemo(() => {
-    const raw = (myProfile?.display_name || 'utente').trim() || 'utente'
-    return raw
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9._]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 28)
-  }, [myProfile?.display_name])
+  const friendsShown = useMemo(() => {
+    if (!uid) return friendships
+    const q = friendFilter.trim().toLowerCase()
+    if (!q) return friendships
+    return friendships.filter((f) => {
+      const oid = otherFriendId(f, uid)
+      const name = (profileMap.get(oid)?.display_name ?? '').toLowerCase()
+      return name.includes(q)
+    })
+  }, [friendships, friendFilter, uid, profileMap])
+
+  const browseProfileHandle = useMemo(
+    () => communityHandleFromDisplayName(myProfile?.display_name ?? ''),
+    [myProfile?.display_name],
+  )
+
+  const goToCommunityProfile = useCallback(
+    (userId: string) => {
+      if (!uid) return
+      setProfileEditing(false)
+      setViewingProfileUserId(userId === uid ? null : userId)
+      setTab('profile')
+      if (userId !== uid && sb) {
+        void fetchCommunityProfiles(sb, [userId]).then((m) => {
+          setProfileMap((prev) => new Map([...prev, ...m]))
+        })
+      }
+    },
+    [uid, sb],
+  )
+
+  const viewedOtherProfile =
+    viewingProfileUserId && uid && viewingProfileUserId !== uid ?
+      profileMap.get(viewingProfileUserId)
+    : undefined
+
+  const isFriendWith = useCallback(
+    (otherId: string) => {
+      if (!uid) return false
+      return friendships.some((f) => otherFriendId(f, uid) === otherId)
+    },
+    [friendships, uid],
+  )
+
+  const loadProfileGallery = useCallback(
+    async (forUserId: string, signal?: AbortSignal) => {
+      if (!sb) return
+      const [photos, rows] = await Promise.all([
+        listCommunityProfilePhotos(sb, forUserId),
+        listFriendshipsInvolvingUser(sb, forUserId),
+      ])
+      if (signal?.aborted) return
+      setProfileGalleryPhotos(photos)
+      const friendIds = rows.map((r) => otherFriendId(r, forUserId))
+      if (friendIds.length === 0) {
+        setProfileGalleryFriends([])
+        return
+      }
+      const pmap = await fetchCommunityProfiles(sb, friendIds)
+      if (signal?.aborted) return
+      setProfileGalleryFriends(friendIds.map((id) => pmap.get(id)).filter((p): p is CommunityProfile => Boolean(p)))
+    },
+    [sb],
+  )
+
+  const onPublishProfilePhoto = useCallback(async () => {
+    if (!sb || !uid) return
+    setGalleryMutating(true)
+    try {
+      await addCommunityProfilePhoto(sb, uid, newProfilePhotoUrl)
+      setNewProfilePhotoUrl('')
+      await loadProfileGallery(uid)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : readSupabaseClientMessage(e))
+    } finally {
+      setGalleryMutating(false)
+    }
+  }, [sb, uid, newProfilePhotoUrl, loadProfileGallery])
+
+  const onDeleteProfilePhoto = useCallback(
+    async (photoId: string) => {
+      if (!sb || !uid) return
+      setGalleryMutating(true)
+      try {
+        await deleteCommunityProfilePhoto(sb, uid, photoId)
+        await loadProfileGallery(uid)
+      } catch (e) {
+        alert(e instanceof Error ? e.message : readSupabaseClientMessage(e))
+      } finally {
+        setGalleryMutating(false)
+      }
+    },
+    [sb, uid, loadProfileGallery],
+  )
+
+  useEffect(() => {
+    if (!sb || !uid || !canUseDiary || tab !== 'profile') return
+    const target = viewingProfileUserId && viewingProfileUserId !== uid ? viewingProfileUserId : uid
+    const ac = new AbortController()
+    setProfileGalleryLoading(true)
+    void loadProfileGallery(target, ac.signal)
+      .catch(() => {
+        if (!ac.signal.aborted) {
+          setProfileGalleryPhotos([])
+          setProfileGalleryFriends([])
+        }
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setProfileGalleryLoading(false)
+      })
+    return () => {
+      ac.abort()
+      setProfileGalleryLoading(false)
+    }
+  }, [sb, uid, canUseDiary, tab, viewingProfileUserId, loadProfileGallery])
 
   if (!cloudEnabled) {
     return (
@@ -607,7 +903,8 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
     )
   }
 
-  const profileTab = tab === 'profile'
+  /** Chat globale, amici/DM e profilo: larghezza a tutto schermo + intestazione community nascosta. */
+  const communityFullBleed = tab === 'profile' || tab === 'chat' || tab === 'friends'
 
   return (
     <>
@@ -616,12 +913,12 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
       : null}
       <div
         className={
-          profileTab ?
+          communityFullBleed ?
             'mx-auto flex w-full min-w-0 max-w-none flex-col gap-0 pb-[max(2rem,calc(0.75rem+env(safe-area-inset-bottom,0px)))] -mx-4 w-[calc(100%+2rem)] sm:-mx-6 sm:w-[calc(100%+3rem)] md:-mx-8 md:w-[calc(100%+4rem)]'
           : 'mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-[max(3rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] sm:gap-6 md:gap-8 md:pb-10'
         }
       >
-        {!profileTab ?
+        {!communityFullBleed ?
           <header className="rounded-2xl border-[3px] border-[#1A1A1A] bg-gradient-to-br from-[#dcecf2] via-[#faf8f5] to-[#fef6d8] p-4 shadow-[5px_5px_0px_#1A1A1A] sm:rounded-3xl sm:p-6 md:p-8">
             <p className="mb-2 inline-flex rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#2a383f] shadow-[2px_2px_0px_#1A1A1A]">
               Community
@@ -642,7 +939,7 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
 
         <div
           className={
-            profileTab ?
+            communityFullBleed ?
               'sticky top-0 z-30 grid w-full min-w-0 grid-cols-3 gap-1.5 border-b-2 border-[#1A1A1A]/12 bg-[#faf8f5]/95 px-0 py-2 backdrop-blur-md sm:gap-2'
             : 'grid w-full min-w-0 grid-cols-3 gap-1.5 sm:gap-2'
           }
@@ -656,19 +953,23 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
           'Il tuo profilo',
           () => {
             if (tab === 'profile' && profileEditing) closeProfileEdit()
-            else setTab('profile')
+            else if (tab === 'profile' && viewingProfileUserId) setViewingProfileUserId(null)
+            else {
+              setViewingProfileUserId(null)
+              setTab('profile')
+            }
           },
         )}
       </div>
 
       {tab === 'chat' ?
         <section
-          className="flex min-h-[min(22rem,55dvh)] min-w-0 flex-col overflow-hidden rounded-2xl border-[3px] border-[#1A1A1A] bg-white shadow-[5px_5px_0px_#1A1A1A] sm:min-h-[22rem] sm:rounded-3xl"
+          className="flex min-h-[calc(100dvh-8.5rem)] min-w-0 flex-col overflow-hidden rounded-none border-[3px] border-[#1A1A1A] bg-white shadow-[4px_4px_0px_#1A1A1A] sm:min-h-[calc(100dvh-9rem)] md:min-h-[calc(100dvh-9.5rem)]"
           aria-label="Chat globale"
         >
           <div
             ref={globalListRef}
-            className="min-h-0 min-w-0 max-h-[min(48dvh,26rem)] flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 pe-4 sm:max-h-[min(52vh,28rem)] sm:px-4 sm:py-4 sm:pe-5"
+            className="min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 pe-4 sm:px-4 sm:py-4 sm:pe-5"
           >
             {globalMessages.length > 0 && globalHasMore ?
               <div className="flex justify-center pb-1">
@@ -695,18 +996,37 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                 mine ?
                   (myProfile?.display_name ?? p?.display_name ?? 'Tu')
                 : (p?.display_name ?? 'Utente')
+              const senderInitial = (p?.display_name ?? (mine ? myProfile?.display_name : null) ?? '?')
+                .slice(0, 1)
+                .toUpperCase()
+              const avatarUrl = mine ? myProfile?.avatar_url : p?.avatar_url
               return (
                 <div
                   key={m.id}
                   className={`flex w-full flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'}`}
                 >
-                  <p
-                    className={`max-w-[min(85%,calc(100%-0.5rem))] px-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#5c6b72] ${
-                      mine ? 'text-right' : 'text-left'
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => goToCommunityProfile(m.user_id)}
+                    aria-label={`Apri profilo di ${senderLabel}`}
+                    className={
+                      'flex max-w-[min(85%,calc(100%-0.5rem))] items-center gap-2 rounded-lg px-0.5 py-0.5 text-left transition hover:bg-[#1A1A1A]/6 ' +
+                      (mine ? 'flex-row-reverse self-end' : '')
+                    }
                   >
-                    {senderLabel}
-                  </p>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#1A1A1A]/35 bg-[#eae5df] text-[10px] font-bold text-[#162327]">
+                      {avatarUrl ?
+                        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                      : senderInitial}
+                    </span>
+                    <span
+                      className={`min-w-0 text-[11px] font-bold uppercase tracking-[0.08em] text-[#5c6b72] ${
+                        mine ? 'text-right' : 'text-left'
+                      }`}
+                    >
+                      {senderLabel}
+                    </span>
+                  </button>
                   <div
                     className={
                       mine ?
@@ -759,114 +1079,258 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
           </div>
         </section>
       : tab === 'friends' ?
-        <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl border-[3px] border-[#1A1A1A] bg-white p-4 shadow-[4px_4px_0px_#1A1A1A]">
-            <h2 className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#162327]">Amici</h2>
-            {friendsBusy ?
-              <p className="mt-2 text-sm text-gray-600">Aggiornamento…</p>
-            : null}
-            <ul className="mt-3 space-y-2">
-              {friendships.length === 0 ?
-                <li className="text-sm text-gray-600">Nessun amico ancora. Invia una richiesta qui sotto.</li>
-              : friendships.map((f) => {
-                  const oid = otherFriendId(f, uid!)
-                  const pr = profileMap.get(oid)
-                  return (
-                    <li key={`${f.user_a}-${f.user_b}`}>
+        <section
+          className="flex min-h-[calc(100dvh-8.5rem)] min-w-0 flex-col overflow-hidden rounded-none border-[3px] border-[#1A1A1A] bg-[#faf8f5] shadow-[4px_4px_0px_#1A1A1A] sm:min-h-[calc(100dvh-9rem)] md:min-h-[calc(100dvh-9.5rem)] md:flex-row"
+          aria-label="Amici e messaggi privati"
+        >
+          <div
+            className={
+              'flex min-h-0 w-full shrink-0 flex-col border-[#1A1A1A]/18 bg-[#ede8e0] md:max-w-[min(100%,22rem)] md:border-r-2 ' +
+              (friendsMobileThread && dmPeer ? 'max-md:hidden' : 'max-md:min-h-0 max-md:flex-1')
+            }
+          >
+            <div className="shrink-0 border-b border-[#1A1A1A]/12 px-3 py-3 sm:px-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-['Space_Grotesk',sans-serif] text-lg font-bold tracking-tight text-[#162327]">
+                  Messaggi
+                </p>
+                {friendsBusy ?
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Aggiorno…</span>
+                : null}
+              </div>
+              {incomingPendingCount > 0 ?
+                <p className="mt-1.5 text-xs font-semibold text-[#2d4a5c]">
+                  {incomingPendingCount} richiesta{incomingPendingCount === 1 ? '' : 'e'} in arrivo
+                </p>
+              : null}
+              <label className="sr-only" htmlFor="friend-filter">
+                Filtra conversazioni
+              </label>
+              <input
+                id="friend-filter"
+                value={friendFilter}
+                onChange={(e) => setFriendFilter(e.target.value)}
+                className="mt-2.5 w-full rounded-full border border-[#1A1A1A]/25 bg-white px-3.5 py-2 text-sm outline-none placeholder:text-gray-400 focus:border-[#1A1A1A]/55"
+                placeholder="Cerca…"
+                type="search"
+              />
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+              <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 sm:px-4">
+                Amici
+              </p>
+              <ul className="divide-y divide-[#1A1A1A]/8">
+                {friendsShown.length === 0 ?
+                  <li className="px-3 py-6 text-center text-sm text-gray-600 sm:px-4">
+                    {friendFilter.trim() ?
+                      'Nessun amico con questo nome.'
+                    : 'Nessun amico ancora. Trova persone in basso.'}
+                  </li>
+                : friendsShown.map((f) => {
+                    const oid = otherFriendId(f, uid!)
+                    const pr = profileMap.get(oid)
+                    const active = dmPeer?.user_id === oid
+                    const preview = dmPreviewByPeer.get(oid)
+                    return (
+                      <li
+                        key={`${f.user_a}-${f.user_b}`}
+                        className={`flex w-full items-stretch ${active ? 'bg-[#dce8ee]/90' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`Profilo di ${pr?.display_name ?? 'Utente'}`}
+                          className="flex shrink-0 items-center px-3 py-2.5 transition hover:bg-white/50 sm:px-4"
+                          onClick={() => goToCommunityProfile(oid)}
+                        >
+                          <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-[#1A1A1A] bg-[#eae5df] text-sm font-bold text-[#162327]">
+                            {pr?.avatar_url ?
+                              <img src={pr.avatar_url} alt="" className="h-full w-full object-cover" />
+                            : (pr?.display_name ?? '?').slice(0, 1).toUpperCase()}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDmWithFriend(oid)}
+                          className={
+                            'min-w-0 flex-1 py-2.5 pr-3 text-left transition sm:pr-4 ' +
+                            (active ? '' : 'hover:bg-white/40')
+                          }
+                        >
+                          <span className="block truncate font-semibold text-[#162327]">
+                            {pr?.display_name ?? 'Utente'}
+                          </span>
+                          {preview ?
+                            <span className="mt-0.5 block truncate text-xs text-gray-600">{preview}</span>
+                          : (
+                            <span className="mt-0.5 block truncate text-xs text-gray-400">Messaggi privati</span>
+                          )}
+                        </button>
+                      </li>
+                    )
+                  })}
+              </ul>
+
+              <div className="border-t border-[#1A1A1A]/10 px-3 py-3 sm:px-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-500">Richieste</p>
+                {requests.filter((r) => r.to_user === uid && r.status === 'pending').length === 0 &&
+                requests.filter((r) => r.from_user === uid && r.status === 'pending').length === 0 ?
+                  <p className="mt-2 text-xs text-gray-500">Nessuna richiesta in sospeso.</p>
+                : (
+                  <ul className="mt-2 space-y-2">
+                    {requests
+                      .filter((r) => r.to_user === uid && r.status === 'pending')
+                      .map((r) => (
+                        <li
+                          key={r.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#1A1A1A]/20 bg-white/90 px-2.5 py-2"
+                        >
+                          <span className="min-w-0 truncate text-xs">
+                            <button
+                              type="button"
+                              className="font-semibold text-[#162327] hover:underline"
+                              onClick={() => goToCommunityProfile(r.from_user)}
+                            >
+                              {profileMap.get(r.from_user)?.display_name ?? 'Qualcuno'}
+                            </button>
+                            <span className="text-gray-500"> vuole connettersi</span>
+                          </span>
+                          <span className="flex shrink-0 gap-1.5">
+                            <button
+                              type="button"
+                              className="rounded-lg border-2 border-[#1A1A1A] bg-[#D8CDE6] px-2 py-1 text-[10px] font-bold"
+                              onClick={() => void onAccept(r.id)}
+                            >
+                              Accetta
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-lg border border-[#1A1A1A]/35 px-2 py-1 text-[10px] font-bold text-gray-600"
+                              onClick={() => void onReject(r.id)}
+                            >
+                              Rifiuta
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    {requests
+                      .filter((r) => r.from_user === uid && r.status === 'pending')
+                      .map((r) => (
+                        <li
+                          key={r.id}
+                          className="rounded-xl border border-dashed border-[#1A1A1A]/25 bg-white/50 px-2.5 py-1.5 text-xs text-gray-600"
+                        >
+                          In attesa verso <strong>{profileMap.get(r.to_user)?.display_name ?? '…'}</strong>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="border-t border-[#1A1A1A]/10">
+                <button
+                  type="button"
+                  onClick={() => setFindPeopleOpen((o) => !o)}
+                  className="flex w-full items-center justify-between px-3 py-2.5 text-left sm:px-4"
+                  aria-expanded={findPeopleOpen}
+                >
+                  <span className="text-sm font-bold text-[#162327]">Trova persone</span>
+                  <span className="text-xs text-gray-500">{findPeopleOpen ? '▼' : '▶'}</span>
+                </button>
+                {findPeopleOpen ?
+                  <div className="space-y-2 border-t border-[#1A1A1A]/8 px-3 pb-4 pt-2 sm:px-4">
+                    <p className="text-[11px] text-gray-500">Almeno 2 caratteri, poi richiesta di amicizia.</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={searchQ}
+                        onChange={(e) => setSearchQ(e.target.value)}
+                        className="min-w-0 flex-1 rounded-full border border-[#1A1A1A]/25 bg-white px-3 py-2 text-sm"
+                        placeholder="Nome…"
+                      />
                       <button
                         type="button"
-                        onClick={() => {
-                          setDmPeer(
-                            pr ?? {
-                              user_id: oid,
-                              display_name: 'Utente',
-                              avatar_url: null,
-                              updated_at: new Date().toISOString(),
-                            },
-                          )
-                          if (!sb) return
-                          void fetchCommunityProfiles(sb, [oid]).then((m) => {
-                            const p = m.get(oid)
-                            if (p) setDmPeer(p)
-                          })
-                        }}
-                        className={`flex w-full items-center gap-3 rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition ${
-                          dmPeer?.user_id === oid ?
-                            'border-[#1A1A1A] bg-[#dcecf2]'
-                          : 'border-transparent hover:bg-[#f4f0ea]'
-                        }`}
+                        onClick={() => void onSearchUsers()}
+                        className="shrink-0 rounded-full border-[3px] border-[#1A1A1A] bg-[#f9e784] px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_#1A1A1A]"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#1A1A1A] bg-[#eae5df] text-xs">
-                          {pr?.avatar_url ?
-                            <img src={pr.avatar_url} alt="" className="h-full w-full object-cover" />
-                          : (
-                            (pr?.display_name ?? '?').slice(0, 1).toUpperCase()
-                          )}
-                        </span>
-                        {pr?.display_name ?? 'Utente'}
+                        Cerca
                       </button>
-                    </li>
-                  )
-                })}
-            </ul>
-
-            <h3 className="mt-6 font-bold text-[#162327]">Richieste in arrivo</h3>
-            <ul className="mt-2 space-y-2">
-              {requests.filter((r) => r.to_user === uid && r.status === 'pending').length === 0 ?
-                <li className="text-sm text-gray-600">Nessuna richiesta in sospeso.</li>
-              : requests
-                  .filter((r) => r.to_user === uid && r.status === 'pending')
-                  .map((r) => (
-                    <li
-                      key={r.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 border-[#1A1A1A]/15 bg-[#faf8f5] px-3 py-2"
-                    >
-                      <span className="text-sm">
-                        Da{' '}
-                        <strong>{profileMap.get(r.from_user)?.display_name ?? 'Qualcuno'}</strong>
-                      </span>
-                      <span className="flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded-lg border-2 border-[#1A1A1A] bg-white px-2 py-1 text-xs font-bold"
-                          onClick={() => void onAccept(r.id)}
+                    </div>
+                    <ul className="max-h-48 space-y-1.5 overflow-y-auto">
+                      {searchHits.map((h) => (
+                        <li
+                          key={h.user_id}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-[#1A1A1A]/12 bg-white px-2 py-1.5"
                         >
-                          Accetta
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg border-2 border-[#1A1A1A]/30 px-2 py-1 text-xs font-bold"
-                          onClick={() => void onReject(r.id)}
-                        >
-                          Rifiuta
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-            </ul>
-
-            <h3 className="mt-6 font-bold text-[#162327]">Inviate (in attesa)</h3>
-            <ul className="mt-2 text-sm text-gray-600">
-              {requests.filter((r) => r.from_user === uid && r.status === 'pending').length === 0 ?
-                <li>Nessuna.</li>
-              : requests
-                  .filter((r) => r.from_user === uid && r.status === 'pending')
-                  .map((r) => (
-                    <li key={r.id}>
-                      In attesa verso <strong>{profileMap.get(r.to_user)?.display_name ?? '…'}</strong>
-                    </li>
-                  ))}
-            </ul>
+                          <button
+                            type="button"
+                            className="min-w-0 truncate text-left text-sm font-medium hover:underline"
+                            onClick={() => goToCommunityProfile(h.user_id)}
+                          >
+                            {h.display_name}
+                          </button>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-lg border-2 border-[#1A1A1A] bg-[#faf8f5] px-2 py-1 text-[10px] font-bold"
+                            onClick={() => void onRequestFriend(h.user_id)}
+                          >
+                            Richiedi
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                : null}
+              </div>
+            </div>
           </div>
 
-          <div className="flex min-h-[22rem] flex-col rounded-3xl border-[3px] border-[#1A1A1A] bg-[#faf8f5] shadow-[4px_4px_0px_#1A1A1A]">
-            <div className="border-b-2 border-[#1A1A1A]/10 px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-[0.1em] text-gray-600">Messaggi privati</p>
-              <p className="font-semibold text-[#162327]">{dmPeer?.display_name ?? 'Scegli un amico'}</p>
-            </div>
-            <div ref={dmListRef} className="max-h-[min(40vh,20rem)] flex-1 space-y-2 overflow-y-auto p-3">
+          <div
+            className={
+              'flex min-h-0 min-w-0 flex-1 flex-col bg-[#faf8f5] ' +
+              (friendsMobileThread && dmPeer ? 'max-md:flex max-md:flex-1' : 'max-md:hidden') +
+              ' md:flex'
+            }
+          >
+            <header className="flex shrink-0 items-center gap-2 border-b border-[#1A1A1A]/12 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3">
+              <button
+                type="button"
+                className="rounded-lg border-2 border-transparent p-2 text-[#162327] hover:bg-white/80 md:hidden"
+                onClick={() => setFriendsMobileThread(false)}
+                aria-label="Torna alla lista"
+              >
+                ←
+              </button>
+              {dmPeer ?
+                <button
+                  type="button"
+                  onClick={() => goToCommunityProfile(dmPeer.user_id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-xl py-1 text-left transition hover:bg-[#1A1A1A]/6 sm:gap-3"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#1A1A1A] bg-[#eae5df] text-xs font-bold sm:h-10 sm:w-10">
+                    {dmPeer.avatar_url ?
+                      <img src={dmPeer.avatar_url} alt="" className="h-full w-full object-cover" />
+                    : (dmPeer.display_name || '?').slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-['Space_Grotesk',sans-serif] text-base font-bold text-[#162327]">
+                      {dmPeer.display_name}
+                    </p>
+                    <p className="text-[11px] text-gray-500">Messaggi privati</p>
+                  </div>
+                </button>
+              : (
+                <p className="flex-1 py-1 text-sm text-gray-500">Seleziona una conversazione</p>
+              )}
+            </header>
+
+            <div
+              ref={dmListRef}
+              className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-4"
+            >
               {!dmPeer ?
-                <p className="text-sm text-gray-600">Seleziona un amico dalla lista a sinistra.</p>
+                <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-2 text-center text-sm text-gray-500">
+                  <p>Scegli un amico dalla lista per iniziare.</p>
+                </div>
               : null}
               {dmPeer && dmRows.length > 0 && dmHasMore ?
                 <div className="flex justify-center pb-1">
@@ -874,22 +1338,35 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                     type="button"
                     disabled={dmLoadingOlder}
                     onClick={() => void loadOlderDm()}
-                    className="rounded-lg border-2 border-[#1A1A1A]/35 bg-white px-3 py-1.5 text-xs font-bold text-[#374550] shadow-[1px_1px_0px_#1A1A1A] disabled:opacity-50"
+                    className="rounded-full border-2 border-[#1A1A1A]/30 bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-50"
                   >
-                    {dmLoadingOlder ? 'Carico…' : 'Carica messaggi precedenti'}
+                    {dmLoadingOlder ? 'Carico…' : 'Messaggi precedenti'}
                   </button>
                 </div>
               : null}
               {dmPeer ?
                 dmRows.map((m) => {
                   const mine = m.sender_id === uid
+                  const peerInitial = (dmPeer.display_name || '?').slice(0, 1).toUpperCase()
                   return (
-                    <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                    <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start gap-2'}`}>
+                      {!mine ?
+                        <button
+                          type="button"
+                          aria-label={`Profilo di ${dmPeer.display_name}`}
+                          onClick={() => goToCommunityProfile(dmPeer.user_id)}
+                          className="mt-auto flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#1A1A1A]/40 bg-[#eae5df] text-[10px] font-bold transition hover:ring-2 hover:ring-[#1A1A1A]/25"
+                        >
+                          {dmPeer.avatar_url ?
+                            <img src={dmPeer.avatar_url} alt="" className="h-full w-full object-cover" />
+                          : peerInitial}
+                        </button>
+                      : null}
                       <div
                         className={
                           mine ?
-                            'max-w-[88%] rounded-xl border border-[#1A1A1A] bg-[#1A1A1A] px-2.5 py-1.5 text-sm text-white'
-                          : 'max-w-[88%] rounded-xl border border-[#1A1A1A]/20 bg-white px-2.5 py-1.5 text-sm'
+                            'max-w-[min(88%,20rem)] rounded-2xl rounded-br-md border border-[#1A1A1A] bg-[#1A1A1A] px-3 py-2 text-sm text-white'
+                          : 'max-w-[min(88%,20rem)] rounded-2xl rounded-bl-md border border-[#1A1A1A]/15 bg-white px-3 py-2 text-sm text-[#162327] shadow-sm'
                         }
                       >
                         <CommunityMessageBody body={m.body} mine={mine} />
@@ -899,74 +1376,130 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                 })
               : null}
             </div>
-            <div className="mt-auto border-t-2 border-[#1A1A1A]/10 p-3">
-              <textarea
-                value={draftDm}
-                onChange={(e) => setDraftDm(e.target.value)}
-                disabled={!dmPeer}
-                maxLength={COMMUNITY_DM_BODY_MAX}
-                rows={2}
-                placeholder={dmPeer ? 'Messaggio privato…' : 'Scegli un amico'}
-                className="mb-2 w-full resize-none rounded-xl border-2 border-[#1A1A1A] bg-white px-3 py-2 text-sm disabled:opacity-50"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
+
+            <div className="shrink-0 border-t border-[#1A1A1A]/12 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <textarea
+                  value={draftDm}
+                  onChange={(e) => setDraftDm(e.target.value)}
                   disabled={!dmPeer}
-                  onClick={() => openGifPicker('dm')}
-                  className="shrink-0 rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
-                >
-                  GIF
-                </button>
-                <button
-                  type="button"
-                  disabled={!dmPeer || !sanitizeCommunityBody(draftDm, COMMUNITY_DM_BODY_MAX)}
-                  onClick={() => void onSendDm()}
-                  className="min-w-0 flex-1 rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
-                >
-                  Invia messaggio
-                </button>
+                  maxLength={COMMUNITY_DM_BODY_MAX}
+                  rows={2}
+                  placeholder={dmPeer ? 'Scrivi un messaggio…' : 'Scegli un amico'}
+                  className="min-h-[2.75rem] flex-1 resize-none rounded-2xl border-2 border-[#1A1A1A]/28 bg-white px-3 py-2 text-sm outline-none focus:border-[#1A1A1A]/55 disabled:opacity-45"
+                />
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    disabled={!dmPeer}
+                    onClick={() => openGifPicker('dm')}
+                    className="rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-2.5 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
+                  >
+                    GIF
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!dmPeer || !sanitizeCommunityBody(draftDm, COMMUNITY_DM_BODY_MAX)}
+                    onClick={() => void onSendDm()}
+                    className="rounded-xl border-[3px] border-[#1A1A1A] bg-[#D8CDE6] px-5 py-2.5 text-sm font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A] disabled:opacity-40"
+                  >
+                    Invia
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="md:col-span-2 rounded-3xl border-[3px] border-[#1A1A1A] bg-white p-4 shadow-[4px_4px_0px_#1A1A1A]">
-            <h3 className="font-['Space_Grotesk',sans-serif] text-lg font-bold text-[#162327]">Cerca utenti per nome</h3>
-            <p className="mt-1 text-xs text-gray-600">Almeno 2 caratteri. Invii una richiesta di amicizia.</p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                className="flex-1 rounded-xl border-2 border-[#1A1A1A] px-3 py-2 text-sm"
-                placeholder="Nome visibile…"
-              />
-              <button
-                type="button"
-                onClick={() => void onSearchUsers()}
-                className="rounded-xl border-[3px] border-[#1A1A1A] bg-[#f9e784] px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_#1A1A1A]"
-              >
-                Cerca
-              </button>
-            </div>
-            <ul className="mt-3 space-y-2">
-              {searchHits.map((h) => (
-                <li
-                  key={h.user_id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 border-[#1A1A1A]/12 bg-[#faf8f5] px-3 py-2"
-                >
-                  <span className="font-medium">{h.display_name}</span>
-                  <button
-                    type="button"
-                    className="rounded-lg border-2 border-[#1A1A1A] bg-white px-3 py-1 text-xs font-bold"
-                    onClick={() => void onRequestFriend(h.user_id)}
-                  >
-                    Richiedi amicizia
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
         </section>
+      : tab === 'profile' && viewingProfileUserId && uid && viewingProfileUserId !== uid ?
+        <div className="flex min-h-[min(100dvh,56rem)] flex-col bg-[#faf8f5] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 sm:px-6 sm:pt-4">
+          <div className="mx-auto flex w-full max-w-md flex-col">
+            <button
+              type="button"
+              onClick={() => setViewingProfileUserId(null)}
+              className="mb-5 self-start rounded-xl border-[3px] border-[#1A1A1A] bg-white px-4 py-2 text-sm font-bold text-[#162327] shadow-[2px_2px_0px_#1A1A1A]"
+            >
+              Indietro
+            </button>
+            {!viewedOtherProfile ?
+              <p className="text-center text-sm font-medium text-gray-600">Caricamento profilo…</p>
+            : (
+              <>
+                <div
+                  className="relative h-32 shrink-0 rounded-2xl bg-gradient-to-br from-[#c9dce6] via-[#e8e0f0] to-[#fef6d8] sm:h-36"
+                  aria-hidden
+                />
+                <div className="relative -mt-12 flex flex-col items-center px-2 text-center sm:-mt-14">
+                  <div className="flex h-[6.5rem] w-[6.5rem] shrink-0 items-center justify-center overflow-hidden rounded-full border-[4px] border-white bg-[#eae5df] font-['Space_Grotesk',sans-serif] text-3xl font-bold text-[#162327] shadow-[0_5px_0_#1A1A1A] ring-2 ring-[#1A1A1A]/10">
+                    {viewedOtherProfile.avatar_url ?
+                      <img src={viewedOtherProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                    : (viewedOtherProfile.display_name || '?').slice(0, 1).toUpperCase()}
+                  </div>
+                  <h2 className="mt-3 font-['Space_Grotesk',sans-serif] text-xl font-bold text-[#162327] sm:text-2xl">
+                    {viewedOtherProfile.display_name}
+                  </h2>
+                  <p className="mt-1 text-sm font-medium text-[#5c6b72]">
+                    @{communityHandleFromDisplayName(viewedOtherProfile.display_name)}
+                  </p>
+                  <p className="mt-4 text-[13px] leading-relaxed text-[#374550]">
+                    Profilo pubblico in community: nome e foto come in chat e nei messaggi.
+                  </p>
+                  <div className="mt-6 grid w-full max-w-sm grid-cols-2 divide-x divide-[#1A1A1A]/12 border-y border-[#1A1A1A]/12 py-4">
+                    <div>
+                      <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
+                        {profileGalleryLoading ? '—' : profileGalleryFriends.length}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Amici</p>
+                    </div>
+                    <div>
+                      <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
+                        {profileGalleryLoading ? '—' : profileGalleryPhotos.length}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Foto</p>
+                    </div>
+                  </div>
+                  <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
+                    {isFriendWith(viewingProfileUserId) ?
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const id = viewingProfileUserId
+                          setViewingProfileUserId(null)
+                          setTab('friends')
+                          openDmWithFriend(id)
+                        }}
+                        className="w-full rounded-2xl border-[3px] border-[#1A1A1A] bg-[#1A1A1A] py-3 text-sm font-bold text-white shadow-[4px_4px_0px_#f9e784]"
+                      >
+                        Messaggio privato
+                      </button>
+                    : (
+                      <button
+                        type="button"
+                        onClick={() => void onRequestFriend(viewingProfileUserId)}
+                        className="w-full rounded-2xl border-[3px] border-[#1A1A1A] bg-[#f9e784] py-3 text-sm font-bold text-[#162327] shadow-[4px_4px_0px_#1A1A1A]"
+                      >
+                        Richiedi amicizia
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-10 w-full max-w-md self-stretch">
+                    <ProfileFriendsAndGallery
+                      friends={profileGalleryFriends}
+                      photos={profileGalleryPhotos}
+                      loading={profileGalleryLoading}
+                      isOwn={false}
+                      onOpenProfile={goToCommunityProfile}
+                      newPhotoUrl=""
+                      onNewPhotoUrlChange={() => {}}
+                      onPublishPhoto={() => {}}
+                      onDeletePhoto={() => {}}
+                      mutating={false}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       : profileEditing ?
         <div className="flex min-h-[min(calc(100dvh-6rem),56rem)] w-full flex-col bg-[#faf8f5] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 sm:px-6 sm:pt-4">
           <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
@@ -1041,19 +1574,21 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                 <div className="mt-6 grid w-full max-w-sm grid-cols-3 divide-x divide-[#1A1A1A]/12 border-y border-[#1A1A1A]/12 py-4">
                   <div>
                     <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
-                      {friendships.length}
+                      {profileGalleryLoading ? '—' : profileGalleryFriends.length}
                     </p>
                     <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Amici</p>
+                  </div>
+                  <div>
+                    <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
+                      {profileGalleryLoading ? '—' : profileGalleryPhotos.length}
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Foto</p>
                   </div>
                   <div>
                     <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold tabular-nums text-[#162327]">
                       {incomingPendingCount}
                     </p>
                     <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">In attesa</p>
-                  </div>
-                  <div>
-                    <p className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#162327]">◆</p>
-                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#5c6b72]">Alveo</p>
                   </div>
                 </div>
 
@@ -1066,17 +1601,20 @@ export default function CommunityPage({ onSelectNav }: { onSelectNav: (id: NavId
                 </button>
               </div>
 
-              <div className="mx-auto mt-8 grid w-full max-w-md grid-cols-3 gap-1 sm:mt-10 sm:gap-1.5" aria-hidden>
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-square rounded-lg border-2 border-dashed border-[#1A1A1A]/12 bg-[#f4f0ea]/60"
-                  />
-                ))}
+              <div className="mx-auto w-full max-w-md">
+                <ProfileFriendsAndGallery
+                  friends={profileGalleryFriends}
+                  photos={profileGalleryPhotos}
+                  loading={profileGalleryLoading}
+                  isOwn
+                  onOpenProfile={goToCommunityProfile}
+                  newPhotoUrl={newProfilePhotoUrl}
+                  onNewPhotoUrlChange={setNewProfilePhotoUrl}
+                  onPublishPhoto={() => void onPublishProfilePhoto()}
+                  onDeletePhoto={(id) => void onDeleteProfilePhoto(id)}
+                  mutating={galleryMutating}
+                />
               </div>
-              <p className="mx-auto mt-2 max-w-md text-center text-[11px] font-medium text-[#8a959b]">
-                Griglia stile raccolta (contenuti personali in arrivo).
-              </p>
             </div>
           </div>
         )

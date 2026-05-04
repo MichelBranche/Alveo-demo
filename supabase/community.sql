@@ -236,3 +236,5 @@ select u.id,
   )
 from auth.users u
 where not exists (select 1 from public.community_profiles p where p.user_id = u.id);
+
+-- Galleria foto profilo + lettura amicizie per i profili altrui: esegui anche community_profile_photos.sql

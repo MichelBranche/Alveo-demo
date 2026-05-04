@@ -224,6 +224,68 @@ export async function acceptFriendRequestRpc(sb: SupabaseClient, reqId: string):
 
 export type FriendshipRow = { user_a: string; user_b: string; created_at: string }
 
+/** Amicizie in cui compare `userId` (per profilo pubblico). Richiede policy di lettura su `community_friendships`. */
+export async function listFriendshipsInvolvingUser(sb: SupabaseClient, userId: string): Promise<FriendshipRow[]> {
+  const { data, error } = await sb
+    .from('community_friendships')
+    .select('*')
+    .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as FriendshipRow[]
+}
+
+export type CommunityProfilePhotoRow = {
+  id: string
+  user_id: string
+  image_url: string
+  created_at: string
+}
+
+const COMMUNITY_PROFILE_PHOTOS_MAX = 60
+const COMMUNITY_PROFILE_PHOTOS_PER_USER_CAP = 30
+
+export async function listCommunityProfilePhotos(
+  sb: SupabaseClient,
+  userId: string,
+  opts?: { limit?: number },
+): Promise<CommunityProfilePhotoRow[]> {
+  const limit = Math.min(opts?.limit ?? COMMUNITY_PROFILE_PHOTOS_MAX, COMMUNITY_PROFILE_PHOTOS_MAX)
+  const { data, error } = await sb
+    .from('community_profile_photos')
+    .select('id,user_id,image_url,created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as CommunityProfilePhotoRow[]
+}
+
+export async function addCommunityProfilePhoto(sb: SupabaseClient, userId: string, imageUrl: string): Promise<void> {
+  const u = imageUrl.trim()
+  if (!u.startsWith('https://') || u.length < 12) throw new Error('Incolla un URL immagine HTTPS valido.')
+  if (u.length > 2048) throw new Error('URL troppo lungo.')
+  const { count, error: countErr } = await sb
+    .from('community_profile_photos')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  if (countErr) throw countErr
+  if ((count ?? 0) >= COMMUNITY_PROFILE_PHOTOS_PER_USER_CAP) {
+    throw new Error(`Puoi pubblicare al massimo ${COMMUNITY_PROFILE_PHOTOS_PER_USER_CAP} foto.`)
+  }
+  const { error } = await sb.from('community_profile_photos').insert({ user_id: userId, image_url: u })
+  if (error) throw error
+}
+
+export async function deleteCommunityProfilePhoto(
+  sb: SupabaseClient,
+  userId: string,
+  photoId: string,
+): Promise<void> {
+  const { error } = await sb.from('community_profile_photos').delete().eq('id', photoId).eq('user_id', userId)
+  if (error) throw error
+}
+
 export async function listFriendships(sb: SupabaseClient, myId: string): Promise<FriendshipRow[]> {
   const { data, error } = await sb
     .from('community_friendships')
